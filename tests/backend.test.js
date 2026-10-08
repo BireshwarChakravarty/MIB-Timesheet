@@ -72,6 +72,7 @@ const Logger = { log: () => {} };
 
 const ctx = vm.createContext({ SpreadsheetApp, Utilities, CacheService, LockService, ContentService, Session, Logger, Date, JSON, Math, Number, String, Object, Array, isNaN, isFinite, console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../backend/Code.gs'), 'utf8'), ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../backend/Reports.gs'), 'utf8'), ctx);
 
 /* ---------- helpers ---------- */
 function call(action, payload, token) {
@@ -183,6 +184,41 @@ check('admin deactivates B', call('adminSetActive', { userId: 'mib02', active: f
 check('B\'s session dies on deactivation', call('myEntries', {}, tokB).error === 'auth');
 check('admin cannot deactivate self', call('adminSetActive', { userId: 'admin', active: false }, tokAdmin).ok === false);
 check('malformed request does not crash', call('', null, null).ok === false);
+
+/* ---------- reports workbook data ---------- */
+{
+  const r = ctx.reportRange_('week', '2026-10-08'); // a Thursday
+  check('report range this week runs Monday to today', r.from === '2026-10-05' && r.to === '2026-10-08');
+  const lw = ctx.reportRange_('lastweek', '2026-10-08');
+  check('report range last week is the full previous Monday to Sunday', lw.from === '2026-09-28' && lw.to === '2026-10-04');
+  check('report range this month starts on the 1st', ctx.reportRange_('month', '2026-10-08').from === '2026-10-01');
+
+  const users = sheets['Users']._data.slice(1).map(row => Object.fromEntries(ctx.USER_COLS.map((c, i) => [c, row[i]])));
+  const rows = [
+    { entryId: 'e1', userId: 'mib01', date: '2026-10-05', task: '=HYPERLINK("http://x")', category: 'Graphic design', platform: 'X', hours: 9, status: 'Completed', notes: '' },
+    { entryId: 'e2', userId: 'mib01', date: '2026-10-06', task: 'Posts', category: 'Social media posting', platform: 'X', hours: 9, status: 'Blocked', notes: '' },
+    { entryId: 'e3', userId: 'mib03', date: '2026-10-06', task: 'Edit', category: 'Video editing', platform: 'YouTube', hours: 2, status: 'Completed', notes: '' },
+    { entryId: 'e4', userId: 'mib03', date: '2026-09-15', task: 'Old', category: 'Video editing', platform: 'YouTube', hours: 4, status: 'Completed', notes: '' }
+  ];
+  const d = ctx.buildReportData_(rows, users, ctx.reportRange_('week', '2026-10-08'), '2026-10-08');
+  const json = JSON.stringify(d);
+  check('report data carries no password salt or hash', !users.some(u => json.includes(String(u.hash)) || json.includes(String(u.salt))));
+  check('report period total counts only entries in range', d.kpi.total === 20);
+  const a = d.members.find(m => m.userId === 'mib01');
+  check('report capacity matches web rules (3 completed workdays x 8h)', a && a.cap === 24 && Math.abs(a.util - 0.75) < 1e-9);
+  const c = d.members.find(m => m.userId === 'mib03');
+  check('report flags low utilisation', c && c.flag === 'Below 60 percent');
+  check('report excludes deactivated members from workload', !d.members.some(m => m.userId === 'mib02'));
+  check('report category shares add up to 1', Math.abs(d.categories.reduce((s, x) => s + x.share, 0) - 1) < 1e-9);
+  check('report day series covers Monday to Thursday', d.days.length === 4 && d.days[1].hours === 11);
+  const sep = d.monthly.months.indexOf('2026-09'), oct = d.monthly.months.indexOf('2026-10');
+  const cm = d.monthly.rows.find(x => x.name === 'Member C');
+  check('monthly matrix has 12 months ending this month', d.monthly.months.length === 12 && oct === 11);
+  check('monthly matrix sums hours per member per month', cm && cm.values[sep] === 4 && cm.values[oct] === 2 && cm.total === 6);
+  check('export list is newest first', d.entries[0].date === '2026-10-06' && d.entries[d.entries.length - 1].date === '2026-09-15');
+  check('formula-like text is neutralised for the sheet', ctx.safeText_('=HYPERLINK("x")') === "'=HYPERLINK(\"x\")" && ctx.safeText_('Plain') === 'Plain');
+  check('load bar scales to 20 blocks', ctx.loadBar_(1.4, 1.4).length === 20 && ctx.loadBar_(0, 1.4) === '');
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
