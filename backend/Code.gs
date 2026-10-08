@@ -25,13 +25,15 @@ var CFG = {
     'X', 'Instagram', 'Facebook', 'YouTube', 'WhatsApp channel',
     'Website', 'Multiple platforms', 'Not applicable'
   ],
-  STATUSES: ['Completed', 'In progress', 'Blocked']
+  STATUSES: ['Completed', 'In progress', 'Blocked'],
+  MODES: ['In office', 'WFH', 'On leave']   // work mode a member ticks for each day
 };
 
 var USER_COLS = ['userId', 'name', 'role', 'teamRole', 'salt', 'hash', 'active',
   'mustChange', 'sessionEpoch', 'createdAt', 'lastLogin'];
 var ENTRY_COLS = ['entryId', 'userId', 'date', 'task', 'category', 'platform',
   'hours', 'status', 'notes', 'createdAt', 'updatedAt'];
+var ATT_COLS = ['userId', 'date', 'mode', 'updatedAt'];
 
 /* ------------------------------------------------------------------ */
 /* One-time setup (run from the editor)                                */
@@ -42,12 +44,13 @@ function setup() {
   ensureSheet_(ss, 'Users', USER_COLS);
   ensureSheet_(ss, 'Entries', ENTRY_COLS);
   ensureSheet_(ss, 'Roster', ['name', 'teamRole']);
+  ensureSheet_(ss, 'Attendance', ATT_COLS);
 
   var users = readTable_('Users');
   var hasAdmin = users.rows.some(function (r) { return r.userId === 'admin'; });
   if (!hasAdmin) {
     var temp = tempPassword_();
-    appendUser_({ userId: 'admin', name: 'Account Director', role: 'admin', teamRole: 'Director' }, temp);
+    appendUser_({ userId: 'admin', name: 'Bireshwar Chakravarty', role: 'admin', teamRole: 'Account Director' }, temp);
     writeCredentials_([['admin', temp]]);
     Logger.log('Admin created. Temporary password is on the Credentials tab. Delete that tab after use.');
   }
@@ -144,6 +147,7 @@ function route_(req) {
     case 'addEntry': return withLock_(function () { return addEntry_(user, p); });
     case 'updateEntry': return withLock_(function () { return updateEntry_(user, p); });
     case 'deleteEntry': return withLock_(function () { return deleteEntry_(user, p); });
+    case 'setMyDay': return withLock_(function () { return setMyDay_(user, p); });
   }
 
   // Admin-only actions. The role is read from the Users sheet, never from the client.
@@ -268,7 +272,40 @@ function myEntries_(user, p) {
   var rows = readTable_('Entries').rows.filter(function (r) {
     return r.userId === user.userId && r.date >= from && r.date <= to;
   });
-  return ok_({ entries: rows.map(publicEntry_) });
+  var att = attendanceRows_().filter(function (r) {
+    return r.userId === user.userId && r.date >= from && r.date <= to;
+  }).map(function (r) { return { date: r.date, mode: r.mode }; });
+  return ok_({ entries: rows.map(publicEntry_), attendance: att });
+}
+
+/** Ticks In office, WFH or On leave for one of the caller's own days. An empty mode clears it. */
+function setMyDay_(user, p) {
+  var date = String(p.date || ''), mode = String(p.mode || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail_('invalid', 'Enter a valid date.');
+  if (mode && CFG.MODES.indexOf(mode) < 0) return fail_('invalid', 'Choose In office, WFH or On leave.');
+  var winErr = checkWindow_(date);
+  if (winErr) return fail_('invalid', winErr);
+  var sheet = attendanceSheet_();
+  var t = readTable_('Attendance');
+  var row = null;
+  for (var i = 0; i < t.rows.length; i++) {
+    if (t.rows[i].userId === user.userId && t.rows[i].date === date) { row = t.rows[i]; break; }
+  }
+  var now = new Date().toISOString();
+  if (row && !mode) sheet.deleteRow(row._row);
+  else if (row) sheet.getRange(row._row, 1, 1, ATT_COLS.length).setValues([[user.userId, date, mode, now]]);
+  else if (mode) sheet.appendRow([user.userId, date, mode, now]);
+  return ok_({ date: date, mode: mode });
+}
+
+function attendanceSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName('Attendance') || ensureSheet_(ss, 'Attendance', ATT_COLS);
+}
+
+function attendanceRows_() {
+  attendanceSheet_();
+  return readTable_('Attendance').rows;
 }
 
 function addEntry_(user, p) {
@@ -375,7 +412,9 @@ function adminEntries_(p) {
       o.name = names[r.userId] || r.userId;
       return o;
     });
-  return ok_({ entries: rows });
+  var att = attendanceRows_().filter(function (r) { return r.date >= from && r.date <= to; })
+    .map(function (r) { return { userId: r.userId, date: r.date, mode: r.mode }; });
+  return ok_({ entries: rows, attendance: att });
 }
 
 function adminUsers_() {
@@ -500,7 +539,7 @@ function publicEntry_(r) {
 
 function options_() {
   return { categories: CFG.CATEGORIES, platforms: CFG.PLATFORMS, statuses: CFG.STATUSES,
-    editWindowDays: CFG.EDIT_WINDOW_DAYS };
+    modes: CFG.MODES, editWindowDays: CFG.EDIT_WINDOW_DAYS };
 }
 
 function withLock_(fn) {

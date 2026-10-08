@@ -8,7 +8,8 @@
  * as Excel or shared view-only without exposing password hashes. The data sheet stays private.
  *
  * Tabs: Dashboard (figures, tables, charts), Monthly (member by month heat map),
- * All entries (flat, filterable table for export), Read me (definitions).
+ * Attendance (In office, WFH, On leave by day), All entries (flat, filterable table for export),
+ * Read me (definitions).
  *
  * Refresh from the "MIB Workload" menu in the data sheet, or run installTriggers() once to
  * refresh every hour and back up weekly.
@@ -86,15 +87,16 @@ function refreshReports_(preset, interactive) {
   var range = reportRange_(preset, today);
   var users = readTable_('Users').rows;
   var entries = readTable_('Entries').rows;
-  var data = buildReportData_(entries, users, range, today);
+  var data = buildReportData_(entries, users, range, today, attendanceRows_());
   var ss = reportsSpreadsheet_();
   ss.setSpreadsheetTimeZone(Session.getScriptTimeZone());
 
   var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, HH:mm');
   writeDashboard_(sheetFor_(ss, 'Dashboard', 0), data, stamp);
   writeMonthly_(sheetFor_(ss, 'Monthly', 1), data, stamp);
-  writeEntries_(sheetFor_(ss, 'All entries', 2), data, stamp);
-  writeReadMe_(sheetFor_(ss, 'Read me', 3), ss, stamp);
+  writeAttendance_(sheetFor_(ss, 'Attendance', 2), data, stamp);
+  writeEntries_(sheetFor_(ss, 'All entries', 3), data, stamp);
+  writeReadMe_(sheetFor_(ss, 'Read me', 4), ss, stamp);
   ss.setActiveSheet(ss.getSheetByName('Dashboard'));
 
   if (interactive) {
@@ -169,7 +171,9 @@ function workdays_(from, to) {
  * rules of the director view in frontend/app.js so the numbers match the web dashboard.
  * Only names, roles and work fields are carried over. Salts and hashes never leave Users.
  */
-function buildReportData_(entries, users, range, today) {
+function buildReportData_(entries, users, range, today, attendance) {
+  var modeOf = {};
+  (attendance || []).forEach(function (a) { modeOf[a.userId + '|' + a.date] = String(a.mode); });
   var people = {};
   users.forEach(function (u) {
     people[u.userId] = { userId: String(u.userId), name: String(u.name), role: String(u.teamRole || ''),
@@ -189,19 +193,30 @@ function buildReportData_(entries, users, range, today) {
     .filter(function (p) { return p.member && p.active; });
 
   var members = activeMembers.map(function (p) {
+    var baseLeave = 0;
     var es = inRange.filter(function (e) { return e.userId === p.userId; });
     var hours = es.reduce(function (s, e) { return s + e.hours; }, 0);
     var days = {};
     es.forEach(function (e) { days[e.date] = 1; });
     var todayCounts = range.to >= today && range.from <= today && isWeekday_(today) &&
-      es.some(function (e) { return e.date === today; });
-    var capDays = baseDays + (todayCounts ? 1 : 0);
+      es.some(function (e) { return e.date === today; }) && modeOf[p.userId + '|' + today] !== 'On leave';
+    // Leave days come out of capacity, so a member on leave is not flagged as underloaded.
+    var leaveDays = 0, wfhDays = 0, officeDays = 0;
+    for (var c0 = range.from; c0 <= range.to && c0 <= today; c0 = addDays_(c0, 1)) {
+      var m0 = modeOf[p.userId + '|' + c0];
+      if (m0 === 'On leave') { leaveDays++; if (isWeekday_(c0) && c0 <= through) baseLeave++; }
+      else if (m0 === 'WFH') wfhDays++;
+      else if (m0 === 'In office') officeDays++;
+    }
+    var capDays = Math.max(0, baseDays - baseLeave) + (todayCounts ? 1 : 0);
     if (hours > 0 && capDays === 0) capDays = 1;
     var cap = capDays * RPT.DAILY_CAPACITY;
     var util = cap ? hours / cap : 0;
     var flag = hours === 0 ? 'Nothing logged' : util > RPT.OVER ? 'Over capacity' : util < RPT.LOW ? 'Below 60 percent' : 'Within range';
+    if (hours === 0 && leaveDays > 0) flag = 'On leave';
     return { name: p.name, role: p.role, userId: p.userId, hours: hours, cap: cap, util: util,
-      days: Object.keys(days).length, entries: es.length, flag: flag };
+      days: Object.keys(days).length, entries: es.length, flag: flag,
+      leaveDays: leaveDays, wfhDays: wfhDays, officeDays: officeDays };
   }).sort(function (a, b) { return b.util - a.util || a.name.localeCompare(b.name); });
 
   var total = inRange.reduce(function (s, e) { return s + e.hours; }, 0);
@@ -248,8 +263,19 @@ function buildReportData_(entries, users, range, today) {
     return a.date < b.date ? 1 : a.date > b.date ? -1 : a.name.localeCompare(b.name);
   });
 
+  var attDays = [];
+  for (var c2 = range.from; c2 <= range.to; c2 = addDays_(c2, 1)) if (isWeekday_(c2) || dayTotals[c2]) attDays.push(c2);
+  var attRows = activeMembers.map(function (p) {
+    return { name: p.name, role: p.role, modes: attDays.map(function (d) { return modeOf[p.userId + '|' + d] || ''; }) };
+  }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+
   return {
     range: range,
+    attendance: { days: attDays, rows: attRows, today: {
+      office: activeMembers.filter(function (p) { return modeOf[p.userId + '|' + today] === 'In office'; }).length,
+      wfh: activeMembers.filter(function (p) { return modeOf[p.userId + '|' + today] === 'WFH'; }).length,
+      leave: activeMembers.filter(function (p) { return modeOf[p.userId + '|' + today] === 'On leave'; }).length
+    } },
     kpi: {
       total: total,
       logging: members.filter(function (m) { return m.hours > 0; }).length,
@@ -319,18 +345,19 @@ function tableHeader_(sh, row, col, labels) {
 
 function flagColours_(flag) {
   if (flag === 'Over capacity') return [RPT.C.badT, RPT.C.bad];
+  if (flag === 'On leave') return [RPT.C.roseSoft, RPT.C.maroon];
   if (flag === 'Below 60 percent') return [RPT.C.warnT, RPT.C.warn];
   if (flag === 'Nothing logged') return [RPT.C.none, RPT.C.muted];
   return [RPT.C.okT, RPT.C.ok];
 }
 
 function writeDashboard_(sh, d, stamp) {
-  var W = 8, C = RPT.C, r = d.range;
-  [180, 160, 80, 80, 90, 150, 80, 130].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
-  sh.setColumnWidth(9, 24);
-  for (var k = 10; k <= 17; k++) sh.setColumnWidth(k, 90);
+  var W = 9, C = RPT.C, r = d.range;
+  [180, 160, 80, 80, 90, 150, 60, 130, 130].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  sh.setColumnWidth(10, 24);
+  for (var k = 11; k <= 18; k++) sh.setColumnWidth(k, 90);
   banner_(sh, 'MIB Workload Report', 'Avian We.  |  ' + r.label + ': ' + fmtYmd_(r.from) + ' to ' + fmtYmd_(r.to) +
-    '  |  Refreshed ' + stamp, 17);
+    '  |  Refreshed ' + stamp, 18);
 
   // KPI tiles: label row and figure row, two columns each.
   var tiles = [
@@ -352,11 +379,12 @@ function writeDashboard_(sh, d, stamp) {
   // Workload by member.
   var row = 7;
   section_(sh, row, 1, W, 'Workload by member');
-  tableHeader_(sh, row + 1, 1, ['MEMBER', 'ROLE', 'HOURS', 'CAPACITY', 'UTILISATION', 'LOAD (full bar = 140%)', 'DAYS', 'FLAG']);
+  tableHeader_(sh, row + 1, 1, ['MEMBER', 'ROLE', 'HOURS', 'CAPACITY', 'UTILISATION', 'LOAD (full bar = 140%)', 'DAYS', 'FLAG', 'OFFICE / WFH / LEAVE']);
   var mStart = row + 2;
   if (d.members.length) {
     sh.getRange(mStart, 1, d.members.length, W).setValues(d.members.map(function (m) {
-      return [safeText_(m.name), safeText_(m.role), m.hours, m.cap, m.util, loadBar_(m.util, 1.4), m.days, m.flag];
+      return [safeText_(m.name), safeText_(m.role), m.hours, m.cap, m.util, loadBar_(m.util, 1.4), m.days, m.flag,
+        m.officeDays + ' / ' + m.wfhDays + ' / ' + m.leaveDays];
     }));
     sh.getRange(mStart, 3, d.members.length, 2).setNumberFormat('General');
     sh.getRange(mStart, 5, d.members.length, 1).setNumberFormat('0%');
@@ -409,7 +437,7 @@ function writeDashboard_(sh, d, stamp) {
 
   // Charts on the right, in brand colours.
   // Charts stack in column J, placed by pixel offset from row 4 so they never overlap.
-  var anchorCol = 10, offset = 0, gap = 24;
+  var anchorCol = 11, offset = 0, gap = 24;
   var memberChartH = Math.max(260, 60 + d.members.length * 28);
   if (d.members.length) {
     sh.insertChart(sh.newChart().setChartType(Charts.ChartType.BAR)
@@ -494,6 +522,34 @@ function writeMonthly_(sh, d, stamp) {
   sh.setFrozenColumns(2);
 }
 
+function writeAttendance_(sh, d, stamp) {
+  var C = RPT.C, days = d.attendance.days, rows = d.attendance.rows, width = days.length + 2, t = d.attendance.today;
+  sh.setColumnWidth(1, 180); sh.setColumnWidth(2, 160);
+  for (var i = 0; i < days.length; i++) sh.setColumnWidth(3 + i, 74);
+  banner_(sh, 'Attendance', d.range.label + '  |  Today: ' + t.office + ' in office, ' + t.wfh + ' WFH, ' + t.leave + ' on leave  |  Refreshed ' + stamp, Math.max(width, 6));
+  tableHeader_(sh, 4, 1, ['MEMBER', 'ROLE'].concat(days.map(function (x) { return fmtYmd_(x, 'EEE d').toUpperCase(); })));
+  if (!rows.length || !days.length) {
+    sh.getRange(5, 1, 1, Math.max(width, 2)).merge().setValue('No members or days in this period.').setFontColor(C.muted);
+    return;
+  }
+  var label = { 'In office': 'Office', 'WFH': 'WFH', 'On leave': 'Leave' };
+  sh.getRange(5, 1, rows.length, width).setValues(rows.map(function (r) {
+    return [safeText_(r.name), safeText_(r.role)].concat(r.modes.map(function (m) { return label[m] || ''; }));
+  }));
+  sh.getRange(5, 1, rows.length, 1).setFontWeight('bold');
+  sh.getRange(5, 2, rows.length, 1).setFontColor(C.muted);
+  var grid = sh.getRange(5, 3, rows.length, days.length).setHorizontalAlignment('center').setFontWeight('bold').setFontSize(9);
+  for (var r0 = 0; r0 < rows.length; r0++) sh.setRowHeight(5 + r0, 26);
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Office').setBackground(C.okT).setFontColor(C.ok).setRanges([grid]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('WFH').setBackground('#e6eefb').setFontColor('#2556a8').setRanges([grid]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Leave').setBackground(C.rose).setFontColor(C.maroon).setRanges([grid]).build()
+  ]);
+  sh.getRange(5, 1, rows.length, width).setBorder(null, null, true, null, null, true, C.line, SpreadsheetApp.BorderStyle.SOLID);
+  sh.setFrozenRows(4);
+  sh.setFrozenColumns(2);
+}
+
 function writeEntries_(sh, d, stamp) {
   var C = RPT.C;
   var headers = ['Date', 'Member', 'User ID', 'Role', 'Category', 'Platform', 'Task', 'Hours', 'Status', 'Notes', 'Logged at', 'Updated at'];
@@ -542,9 +598,10 @@ function writeReadMe_(sh, ss, stamp) {
   var rows = [
     ['Dashboard', 'Figures, workload by member, category and status split, hours per day, and charts for the period named in the banner.'],
     ['Monthly', 'Hours per member per month for the last 12 months. Darker cells mean more hours.'],
+    ['Attendance', 'In office, WFH or On leave as ticked by each member for each day of the period. Blank means not ticked.'],
     ['All entries', 'Every entry as a flat table with a filter on each column. Best tab for exporting.'],
     ['Hours', 'Decimal hours in quarter steps: 0.25 = 15 min, 0.5 = 30 min, 0.75 = 45 min. So 3.75 means 3 hours 45 minutes.'],
-    ['Capacity', RPT.DAILY_CAPACITY + ' hours per working day (Monday to Friday) up to yesterday. Today counts once a member has logged today.'],
+    ['Capacity', RPT.DAILY_CAPACITY + ' hours per working day (Monday to Friday) up to yesterday, minus days the member ticked On leave. Today counts once a member has logged today.'],
     ['Utilisation', 'Hours logged divided by capacity.'],
     ['Over capacity', 'Utilisation above ' + Math.round(RPT.OVER * 100) + ' percent.'],
     ['Below 60 percent', 'Utilisation under ' + Math.round(RPT.LOW * 100) + ' percent.'],
