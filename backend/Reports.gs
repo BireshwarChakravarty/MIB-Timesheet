@@ -541,9 +541,9 @@ function writeAttendance_(sh, d, stamp) {
   var grid = sh.getRange(5, 3, rows.length, days.length).setHorizontalAlignment('center').setFontWeight('bold').setFontSize(9);
   for (var r0 = 0; r0 < rows.length; r0++) sh.setRowHeight(5 + r0, 26);
   sh.setConditionalFormatRules([
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Office').setBackground(C.okT).setFontColor(C.ok).setRanges([grid]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('WFH').setBackground('#e6eefb').setFontColor('#2556a8').setRanges([grid]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Leave').setBackground(C.rose).setFontColor(C.maroon).setRanges([grid]).build()
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Office').setBackground(C.rose).setFontColor('#6b0332').setRanges([grid]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('WFH').setBackground('#eeecf0').setFontColor(C.ink).setRanges([grid]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Leave').setBackground(C.crimson).setFontColor(C.white).setRanges([grid]).build()
   ]);
   sh.getRange(5, 1, rows.length, width).setBorder(null, null, true, null, null, true, C.line, SpreadsheetApp.BorderStyle.SOLID);
   sh.setFrozenRows(4);
