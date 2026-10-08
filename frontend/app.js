@@ -38,8 +38,18 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { t.classList.remove('show'); }, 2600);
   }
+  function initials(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    if (p.length > 1 && /^\d+$/.test(p[p.length - 1])) return p[p.length - 1].slice(-2);
+    return ((p[0] || '').charAt(0) + (p.length > 1 ? p[p.length - 1].charAt(0) : '')).toUpperCase();
+  }
+  function greeting() {
+    var hr = new Date().getHours();
+    return hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  }
+  function statusClass(s) { return s === 'Completed' ? 'ok' : s === 'Blocked' ? 'bad' : 'warn'; }
   function statusBadge(s) {
-    var cls = s === 'Completed' ? 'ok' : s === 'Blocked' ? 'bad' : 'warn';
+    var cls = statusClass(s);
     return '<span class="badge ' + cls + '">' + esc(s) + '</span>';
   }
 
@@ -287,18 +297,19 @@
     renderLogin(msg || '');
   }
 
-  function logoImg() {
-    return '<img src="assets/logo.svg" alt="Avian We." onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'">' +
-      '<span class="wordmark" style="display:none">Avian We.</span>';
+  function logoImg(kind) {
+    return '<img class="logo-' + (kind || 'mark') + '" src="assets/' + (kind === 'full' ? 'logo.png' : 'logo-mark.png') + '" alt="Avian We." onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'">' +
+      '<span class="lockup" style="display:none"><span class="lk-avian">AVIAN</span><span class="lk-we">We.</span></span>';
   }
 
   function header() {
     var u = S.user;
     return '<header class="topbar"><div class="topbar-inner">' +
-      '<div class="brand">' + logoImg() + '<span class="brand-sep"></span><span class="brand-title">' + esc(CFG.TITLE) + '</span></div>' +
-      '<div class="who"><div><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || (u.role === 'admin' ? 'Director' : 'Member')) + '</span></div>' +
+      '<div class="brand">' + logoImg('mark') + '<span class="brand-sep"></span><span class="brand-title">' + esc(CFG.TITLE) + '</span></div>' +
+      '<div class="who"><span class="avatar" aria-hidden="true">' + esc(initials(u.name)) + '</span>' +
+      '<div><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || (u.role === 'admin' ? 'Director' : 'Member')) + '</span></div>' +
       '<button class="linkbtn" id="btnPw" type="button">Change password</button>' +
-      '<button class="linkbtn" id="btnOut" type="button">Sign out</button></div></div></header>';
+      '<button class="btn small secondary" id="btnOut" type="button">Sign out</button></div></div></header>';
   }
 
   function bindHeader() {
@@ -318,17 +329,27 @@
       '<li>First sign-in flow: <code>mib08</code> / <code>Welcome@01</code></li></ul>' +
       '<button class="linkbtn" id="btnReset" type="button" style="color:var(--plum)">Reset demo data</button></div>' : '';
     app.innerHTML = '<div class="login">' +
-      '<aside class="login-aside"><div class="brand">' + logoImg() + '</div>' +
-      '<div><h1>Log the work. See the load.</h1><p>Each member records their own tasks and hours. Entries are private to the member and visible to the account director.</p></div>' +
-      '<small>' + esc(CFG.TITLE) + ' | Avian We.</small></aside>' +
+      '<aside class="login-aside"><span class="aside-tag">MIB account | Avian We.</span>' +
+      '<div class="aside-copy"><h1>Log the work.<br>See the load.</h1><p>Each member records their own tasks and hours. Entries are private to the member and visible to the account director.</p></div>' +
+      '<div class="glass" aria-hidden="true"><div class="glass-top"><div><small>This week</small><b>166 h</b></div><span class="glass-pill">On track</span></div>' +
+      '<div class="glass-bars"><i style="height:62%"></i><i style="height:80%"></i><i style="height:74%"></i><i style="height:91%"></i><i style="height:48%"></i></div>' +
+      '<div class="glass-foot"><span class="glass-faces"><em>TL</em><em>CW</em><em>GD</em><em>VE</em></span><small>21 members logging</small></div></div>' +
+      '<small>' + esc(CFG.TITLE) + '</small></aside>' +
       '<main class="login-main"><form class="login-box" id="loginForm" novalidate>' +
-      '<h2>Sign in</h2>' +
+      '<div class="login-logo">' + logoImg('full') + '</div>' +
+      '<p class="eyebrow">' + esc(CFG.TITLE) + '</p><h2>Sign in</h2><p class="muted login-sub">Use the user ID and password the account director gave you.</p>' +
       '<div class="field"><label for="uid">User ID</label><input id="uid" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>' +
-      '<div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required></div>' +
+      '<div class="field"><label for="pw">Password</label><div class="pw-wrap"><input id="pw" type="password" autocomplete="current-password" required>' +
+      '<button class="pw-toggle" id="pwToggle" type="button" aria-label="Show password" aria-pressed="false"></button></div></div>' +
       '<p class="err" id="loginErr" role="alert">' + esc(msg || '') + '</p>' +
       '<button class="btn" type="submit" id="loginBtn">Sign in</button>' + demo +
       '</form></main></div>';
     var uid = $('#uid'); uid.focus();
+    $('#pwToggle').addEventListener('click', function () {
+      var f = $('#pw'), show = f.type === 'password';
+      f.type = show ? 'text' : 'password';
+      this.setAttribute('aria-pressed', show); this.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
     var rb = $('#btnReset');
     if (rb) rb.addEventListener('click', function () { Mock.reset(); toast('Demo data reset'); });
     $('#loginForm').addEventListener('submit', function (ev) {
@@ -349,6 +370,7 @@
   function renderChangePassword(forced) {
     app.innerHTML = (forced ? '' : header()) + '<div class="' + (forced ? 'login-main' : 'page') + '"' + (forced ? ' style="min-height:100vh"' : '') + '>' +
       '<form class="login-box" id="pwForm" novalidate style="' + (forced ? '' : 'max-width:420px') + '">' +
+      (forced ? '<div class="login-logo">' + logoImg('full') + '</div>' : '') +
       '<h2>' + (forced ? 'Set your password' : 'Change password') + '</h2>' +
       (forced ? '<p class="muted" style="margin:6px 0 16px">Replace the temporary password before you continue.</p>' : '<div style="height:12px"></div>') +
       '<div class="field"><label for="cp">' + (forced ? 'Temporary password' : 'Current password') + '</label><input id="cp" type="password" autocomplete="current-password" required></div>' +
@@ -385,8 +407,9 @@
   function renderMember() {
     S.member = S.member || { editing: null, entries: [] };
     var t = today(), win = S.options.editWindowDays;
-    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><h1>Log your work</h1>' +
-      '<p>Record each task and the hours you spent. Only you and the account director can see your entries.</p></div></div>' +
+    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + S.user.name) + '</p><h1>Log your work</h1>' +
+      '<p>Record each task and the hours you spent. Only you and the account director can see your entries.</p></div>' +
+      '<span class="date-chip">' + esc(fmtDay(t)) + '</span></div>' +
       '<div class="grid-member">' +
       '<section class="panel" aria-labelledby="formTitle"><div class="panel-head"><h2 id="formTitle">New entry</h2></div><div class="panel-body">' +
       '<form id="entryForm" novalidate>' +
@@ -448,8 +471,8 @@
     var td = sum(list.filter(function (e) { return e.date === t; }), function (e) { return e.hours; });
     var pct = Math.min(100, wk / CFG.WEEKLY_TARGET * 100);
     $('#weekBox').innerHTML = '<div class="week-summary"><div class="week-figures">' +
-      '<div class="fig"><b>' + h(td) + '</b><span>Hours today</span></div>' +
-      '<div class="fig"><b>' + h(wk) + '</b><span>Hours this week, target ' + CFG.WEEKLY_TARGET + '</span></div></div>' +
+      '<div class="fig"><i class="ico ico-sun"></i><b>' + h(td) + '</b><span>Hours today</span></div>' +
+      '<div class="fig"><i class="ico ico-cal"></i><b>' + h(wk) + '</b><span>Hours this week, target ' + CFG.WEEKLY_TARGET + '</span></div></div>' +
       '<div class="meter' + (wk > CFG.WEEKLY_TARGET ? ' over' : '') + '" role="img" aria-label="' + h(wk) + ' of ' + CFG.WEEKLY_TARGET + ' hours this week"><span style="width:' + pct + '%"></span></div></div>';
     if (!list.length) { $('#entryList').innerHTML = '<div class="empty">No entries yet. Add your first task using the form.</div>'; return; }
     var byDay = {};
@@ -459,7 +482,7 @@
       var editable = d >= addDays(t, -win);
       return '<div class="day-head"><span>' + esc(fmtDay(d)) + '</span><span>' + h(total) + ' h</span></div>' +
         byDay[d].map(function (e) {
-          return '<article class="entry"><div><div class="entry-task">' + esc(e.task) + '</div>' +
+          return '<article class="entry s-' + statusClass(e.status) + '"><div><div class="entry-task">' + esc(e.task) + '</div>' +
             '<div class="entry-meta"><span>' + esc(e.category) + '</span><span>' + esc(e.platform) + '</span>' + statusBadge(e.status) + '</div></div>' +
             '<div class="entry-hours">' + h(e.hours) + ' h</div>' +
             (e.notes ? '<div class="entry-note">' + esc(e.notes) + '</div>' : '') +
@@ -504,7 +527,7 @@
 
   function renderAdmin() {
     S.admin = S.admin || { tab: 'overview', preset: 'week', from: '', to: '', entries: [], users: [], f: { member: '', category: '', status: '', q: '' }, cred: null };
-    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><h1>Team workload</h1><p>Entries from all members. Members see only their own.</p></div>' +
+    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + S.user.name) + '</p><h1>Team workload</h1><p>Entries from all members. Members see only their own.</p></div>' +
       '<div class="rangebar" id="rangeBar"></div></div>' +
       '<div class="tabs" role="tablist">' +
       ['overview:Overview', 'entries:Entries', 'team:Team'].map(function (x) {
@@ -598,15 +621,15 @@
 
     $('#adminBody').innerHTML =
       '<div class="figures">' +
-      '<div class="fig"><b>' + h(total) + '</b><span>Hours logged</span></div>' +
-      '<div class="fig"><b>' + logging.length + ' of ' + stats.length + '</b><span>Members with entries</span></div>' +
-      '<div class="fig"><b>' + h(avgDay) + '</b><span>Average hours per member per logged day</span></div>' +
-      '<div class="fig' + (over ? ' alert' : '') + '"><b>' + over + '</b><span>Members over capacity</span></div></div>' +
+      '<div class="fig"><i class="ico ico-clock"></i><b>' + h(total) + '</b><span>Hours logged</span></div>' +
+      '<div class="fig"><i class="ico ico-team"></i><b>' + logging.length + ' of ' + stats.length + '</b><span>Members with entries</span></div>' +
+      '<div class="fig"><i class="ico ico-avg"></i><b>' + h(avgDay) + '</b><span>Average hours per member per logged day</span></div>' +
+      '<div class="fig' + (over ? ' alert' : '') + '"><i class="ico ico-alert"></i><b>' + over + '</b><span>Members over capacity</span></div></div>' +
       '<section class="panel"><div class="panel-head"><h2>Workload by member</h2><span class="muted">Capacity is ' + CFG.DAILY_CAPACITY + ' hours per working day. The line marks 100 percent. Today counts once a member has logged.</span></div>' +
       '<div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Hours</th><th>Against capacity</th><th class="num">Use</th><th class="num">Days logged</th><th>Flag</th></tr></thead><tbody>' +
       (stats.length ? stats.map(function (s) {
         var w = Math.min(s.util, 1.4) / 1.4 * 100;
-        return '<tr><td class="namecell"><button type="button" data-member="' + esc(s.user.userId) + '">' + esc(s.user.name) + '</button><span>' + esc(s.user.teamRole) + '</span></td>' +
+        return '<tr><td class="namecell"><span class="avatar sm" aria-hidden="true">' + esc(initials(s.user.name)) + '</span><button type="button" data-member="' + esc(s.user.userId) + '">' + esc(s.user.name) + '</button><span>' + esc(s.user.teamRole) + '</span></td>' +
           '<td class="num">' + h(s.hours) + '</td>' +
           '<td><div class="bar' + (s.flag === 'over' ? ' over' : '') + '"><span style="width:' + w + '%"></span><i style="left:' + (100 / 1.4) + '%"></i></div></td>' +
           '<td class="num">' + Math.round(s.util * 100) + '%</td><td class="num">' + s.days + '</td><td>' + flagBadge(s.flag) + '</td></tr>';
@@ -700,7 +723,7 @@
       '<section class="panel"><div class="panel-head"><h2>Accounts</h2><span class="muted">' + a.users.length + ' total</span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>User ID</th><th>Status</th><th>Actions</th></tr></thead><tbody>' +
       a.users.map(function (u) {
         var self = u.userId === S.user.userId;
-        return '<tr><td class="namecell"><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || u.role) + '</span></td><td>' + esc(u.userId) + '</td>' +
+        return '<tr><td class="namecell"><span class="avatar sm" aria-hidden="true">' + esc(initials(u.name)) + '</span><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || u.role) + '</span></td><td>' + esc(u.userId) + '</td>' +
           '<td>' + (u.active ? '<span class="badge ok">Active</span>' : '<span class="badge neutral">Inactive</span>') + '</td><td>' +
           '<button class="btn small secondary" data-reset="' + esc(u.userId) + '" type="button">Reset password</button> ' +
           (self ? '' : '<button class="btn small ' + (u.active ? 'danger' : 'secondary') + '" data-active="' + esc(u.userId) + '" data-to="' + (!u.active) + '" type="button">' + (u.active ? 'Deactivate' : 'Reactivate') + '</button>') +

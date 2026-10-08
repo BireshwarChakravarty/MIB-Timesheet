@@ -32,7 +32,7 @@ Use a fresh Google account that only you control.
 6. **Time the hashing.** Run `benchmarkHash` and read the log. If one hash takes more than about 700 ms, lower `PBKDF_ROUNDS` at the top of `Code.gs`.
 7. **Deploy.** Deploy > New deployment > Web app. Execute as: Me. Who has access: Anyone. Copy the Web app URL. After any later change to `Code.gs`, use Deploy > Manage deployments > Edit > New version.
 8. **Connect the frontend.** In `frontend/config.js` set `API_URL` to that URL.
-9. **Add the logo.** Save the official logo as `frontend/assets/logo.svg`. Until then a text wordmark shows.
+9. **Logo.** `frontend/assets/logo.png` (sign-in page), `logo-mark.png` (header) and `favicon.png` are cut from a screenshot of avianwe.com. Replace them with the official files at the same names for sharper rendering.
 10. **Publish.** In the GitHub repo go to Settings > Pages > Source and pick GitHub Actions. `.github/workflows/pages.yml` then publishes `/frontend` on every push to `main` that changes it (or run it by hand from the Actions tab).
 11. **Backups.** In Apps Script add a time-driven trigger for `weeklyBackup` (weekly).
 
