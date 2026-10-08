@@ -546,6 +546,7 @@
       '<div class="fig wide"><i class="ico ico-cal"></i><b>' + hm(wk) + ' <small>of ' + CFG.WEEKLY_TARGET + 'h</small></b><span>' + (wk >= CFG.WEEKLY_TARGET ? 'Weekly target reached' : hm(CFG.WEEKLY_TARGET - wk) + ' left this week') + '</span>' +
       '<div class="meter' + (wk > CFG.WEEKLY_TARGET ? ' over' : '') + '" role="img" aria-label="' + hm(wk) + ' of ' + CFG.WEEKLY_TARGET + ' hours this week"><span style="width:' + pct + '%"></span></div></div>' +
       '<div class="fig"><i class="ico ico-avg"></i><b>' + streak + ' day' + (streak === 1 ? '' : 's') + '</b><span>Logging streak</span></div>';
+    rankCategories(list);
     renderModeCard();
     renderAgain(list);
     renderInsights(list, t, wkStart);
@@ -605,10 +606,16 @@
     });
   }
 
-  // One colour per category, used for the day bars, row dots and legend.
-  var CAT_COLORS = ['#a50550', '#d4508a', '#7f043b', '#e08a2c', '#2f9a6d', '#2f6fd1', '#8e5fb3', '#d9a03f', '#3f8f9b', '#9a8f9e'];
+  // Category colours, all from the Avian We. palette (crimson, rose, maroon, blush, charcoal, wine),
+  // alternating dark and light so neighbouring segments stay distinct. The member's biggest category
+  // gets crimson, the next rose, and so on, so the same category keeps one colour across the page.
+  var CAT_COLORS = ['#a50550', '#e0619a', '#6b0332', '#f2b3cd', '#363636', '#c73a78', '#8a8490', '#3d0120', '#b98aa0', '#d6d0d9'];
+  function rankCategories(list) {
+    var h = {}; list.forEach(function (e) { h[e.category] = (h[e.category] || 0) + e.hours; });
+    S.member.catRank = Object.keys(h).sort(function (a, b) { return h[b] - h[a]; });
+  }
   function catColor(c) {
-    var i = (S.options.categories || []).indexOf(c);
+    var i = (S.member && S.member.catRank || []).indexOf(c);
     return CAT_COLORS[(i < 0 ? CAT_COLORS.length - 1 : i) % CAT_COLORS.length];
   }
 
