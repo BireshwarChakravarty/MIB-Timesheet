@@ -26,7 +26,7 @@ Goal: a timesheet-style dashboard where each team member logs tasks and hours so
 - `README.md` deployment steps.
 
 ## Design
-Source Serif 4 (headings, figures) and Source Sans 3 (body). Palette is an approximation of Avian We. branding: deep plum, maroon and dark pink, taken from descriptions on avianwe.com. The site publishes no hex values, so every colour is a CSS variable at the top of `frontend/styles.css`. Replace with the official guideline values when available. The official logo is not embedded: save it as `frontend/assets/logo.svg` (a text wordmark shows until then).
+Plus Jakarta Sans (headings, figures, labels) and Source Sans 3 (body, matches avianwe.com). Colours are sampled from the avianwe.com header: crimson `#a50550`, maroon `#7f043b`, nav maroon `#691337`, charcoal `#363636`. All tokens are CSS variables at the top of `frontend/styles.css`; swap in the official guideline values when available. Logo PNGs in `frontend/assets/` are cut from a screenshot (low resolution); replace with official files at the same names. `frontend/motion.js` plays entrance animations only when the screen or admin tab changes, counts up headline figures, and is disabled under prefers-reduced-motion.
 
 ## Not verified, do these before rollout
 - `Code.gs` has never run in Google's real runtime. Deploy, then run `benchmarkHash`. If one hash takes more than about 700 ms, lower `CFG.PBKDF_ROUNDS`.
