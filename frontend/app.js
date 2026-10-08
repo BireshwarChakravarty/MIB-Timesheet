@@ -605,44 +605,66 @@
     });
   }
 
+  // One colour per category, used for the day bars, row dots and legend.
+  var CAT_COLORS = ['#a50550', '#d4508a', '#7f043b', '#e08a2c', '#2f9a6d', '#2f6fd1', '#8e5fb3', '#d9a03f', '#3f8f9b', '#9a8f9e'];
+  function catColor(c) {
+    var i = (S.options.categories || []).indexOf(c);
+    return CAT_COLORS[(i < 0 ? CAT_COLORS.length - 1 : i) % CAT_COLORS.length];
+  }
+
   function renderList() {
     var t = today(), win = S.options.editWindowDays, list = S.member.entries, v = S.member.view;
     var from = v === 'week' ? mondayOf(t) : v === '28' ? addDays(t, -27) : addDays(t, -6);
     var shown = list.filter(function (e) { return e.date >= from; });
-    var hrs = sum(shown, function (e) { return e.hours; }), daysLogged = {};
-    shown.forEach(function (e) { daysLogged[e.date] = 1; });
+    var hrs = sum(shown, function (e) { return e.hours; }), daysLogged = {}, cats = {};
+    shown.forEach(function (e) { daysLogged[e.date] = 1; cats[e.category] = (cats[e.category] || 0) + e.hours; });
     var nDays = Object.keys(daysLogged).length;
+    var catKeys = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
     $('#listSum').innerHTML = '<div class="sumstrip">' +
       '<div><b>' + shown.length + '</b><span>Entries</span></div>' +
       '<div><b>' + hm(hrs) + '</b><span>Total time</span></div>' +
       '<div><b>' + nDays + '</b><span>Days logged</span></div>' +
-      '<div><b>' + hm(nDays ? hrs / nDays : 0) + '</b><span>Average per day</span></div></div>';
+      '<div><b>' + hm(nDays ? hrs / nDays : 0) + '</b><span>Average per day</span></div></div>' +
+      (catKeys.length ? '<div class="cat-legend">' + catKeys.map(function (c) {
+        return '<span><i style="background:' + catColor(c) + '"></i>' + esc(c) + ' <b>' + hm(cats[c]) + '</b></span>';
+      }).join('') + '</div>' : '');
     var byDay = {};
     shown.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
     var days = [];
     for (var c = t; c >= from; c = addDays(c, -1)) if (isWeekday(c) || byDay[c]) days.push(c);
     var edit = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>';
     var del = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+    var tick = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    var cap = CFG.DAILY_CAPACITY;
     var html = days.map(function (d) {
       var es = byDay[d] || [], total = sum(es, function (e) { return e.hours; }), editable = d >= addDays(t, -win), m = myMode(d);
-      var head = '<div class="day-head"><span class="dh-date">' + esc(d === t ? 'Today, ' + fmtShort(d) : fmtDay(d)) + modeTag(m) + '</span>' +
-        '<span class="dh-total"><i class="dh-bar"><i style="width:' + Math.min(100, total / CFG.DAILY_CAPACITY * 100) + '%"></i></i>' + hm(total) + '</span></div>';
+      var scale = Math.max(cap, total);
+      var head = '<header class="dhead"><div class="dh-left"><b>' + esc(d === t ? 'Today' : parse(d).toLocaleDateString('en-IN', { weekday: 'long' })) + '</b>' +
+        '<span>' + esc(fmtShort(d)) + '</span>' + modeTag(m) + '</div>' +
+        '<div class="dh-right"><b>' + hm(total) + '</b><span>of ' + cap + 'h</span></div></header>';
       if (!es.length) {
-        return head + '<div class="day-empty">' + (m === 'On leave' ? 'On leave' : d === t ? 'Nothing logged yet today' : 'Nothing logged') +
-          (editable && m !== 'On leave' ? '<button type="button" class="chip" data-logday="' + d + '">Log time</button>' : '') + '</div>';
+        return '<section class="dblock empty-day">' + head + '<div class="day-empty">' + (m === 'On leave' ? 'On leave' : d === t ? 'Nothing logged yet today' : 'Nothing logged') +
+          (editable && m !== 'On leave' ? '<button type="button" class="chip" data-logday="' + d + '">Log time</button>' : '') + '</div></section>';
       }
-      return head + es.map(function (e) {
-        return '<article class="entry s-' + statusClass(e.status) + '"><div class="entry-main"><div class="entry-task">' + esc(e.task) + '</div>' +
-          '<div class="entry-meta"><span>' + esc(e.category) + '</span><span>' + esc(e.platform) + '</span>' + statusBadge(e.status) + '</div>' +
-          (e.notes ? '<div class="entry-note">' + esc(e.notes) + '</div>' : '') + '</div>' +
-          '<div class="entry-side"><div class="entry-hours">' + hm(e.hours) + '</div>' +
+      var bar = '<div class="sbar" role="img" aria-label="' + esc(hm(total) + ' logged against ' + cap + ' hours') + '">' +
+        es.map(function (e) {
+          return '<span style="width:' + (e.hours / scale * 100) + '%;background:' + catColor(e.category) + '" title="' + esc(e.task + ': ' + hm(e.hours)) + '"></span>';
+        }).join('') + (total < cap ? '<span class="gap" style="width:' + ((cap - total) / scale * 100) + '%"></span>' : '') +
+        (total > cap ? '<i class="cap-mark" style="left:' + (cap / scale * 100) + '%"></i>' : '') + '</div>';
+      return '<section class="dblock">' + head + bar + es.map(function (e) {
+        var st = statusClass(e.status);
+        return '<article class="entry trow s-' + st + '"><i class="cdot" style="background:' + catColor(e.category) + '"></i>' +
+          '<b class="t-h">' + hm(e.hours) + '</b>' +
+          '<div class="t-main"><span class="t-task">' + esc(e.task) + '</span><span class="t-meta">' + esc(e.category) + ' &middot; ' + esc(e.platform) + '</span>' +
+          (e.notes ? '<span class="t-note">' + esc(e.notes) + '</span>' : '') + '</div>' +
+          (st === 'ok' ? '<span class="t-ok" title="Completed" aria-label="Completed">' + tick + '</span>' : statusBadge(e.status)) +
           (editable ? '<div class="entry-actions"><button class="icon-btn" data-edit="' + esc(e.entryId) + '" type="button" aria-label="Edit entry" title="Edit">' + edit + '</button>' +
             '<button class="icon-btn del" data-del="' + esc(e.entryId) + '" type="button" aria-label="Delete entry" title="Delete">' + del + '</button></div>' : '<span class="locked" title="Older than ' + win + ' days">Locked</span>') +
-          '</div></article>';
-      }).join('');
+          '</article>';
+      }).join('') + '</section>';
     }).join('');
     var box = $('#entryList');
-    box.innerHTML = html || '<div class="empty">No entries yet. Add your first task using the form.</div>';
+    box.innerHTML = html ? '<div class="dblocks">' + html + '</div>' : '<div class="empty">No entries yet. Add your first task using the form.</div>';
     $all('[data-edit]', box).forEach(function (b) { b.addEventListener('click', function () { startEdit(b.getAttribute('data-edit')); }); });
     $all('[data-logday]', box).forEach(function (b) {
       b.addEventListener('click', function () {
@@ -697,8 +719,8 @@
       '<div class="cal"><span></span>' + ['M', 'T', 'W', 'T', 'F'].map(function (x) { return '<span class="cal-day">' + x + '</span>'; }).join('') + cal + '</div></div>' +
       '<div class="ins-block"><h3>Where your time went <small>last 14 days</small></h3>' +
       (catRows.length ? catRows.map(function (c) {
-        return '<div class="ins-row"><span>' + esc(c[0]) + '</span><b>' + hm(c[1]) + '</b>' +
-          '<div class="bar"><span style="width:' + (c[1] / catRows[0][1] * 100) + '%"></span></div></div>';
+        return '<div class="ins-row"><span><i class="cdot" style="background:' + catColor(c[0]) + '"></i>' + esc(c[0]) + '</span><b>' + hm(c[1]) + '</b>' +
+          '<div class="bar"><span style="width:' + (c[1] / catRows[0][1] * 100) + '%;background:' + catColor(c[0]) + '"></span></div></div>';
       }).join('') : '<p class="muted">Nothing logged yet.</p>') + '</div>' +
       '<div class="ins-block"><h3>Task status <small>last 14 days</small></h3><div class="ins-stats">' +
       '<div class="ins-stat ok"><b>' + stat.Completed + '</b><span>Completed</span></div>' +
