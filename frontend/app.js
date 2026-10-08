@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var CFG = Object.assign({ API_URL: '', TITLE: 'MIB Workload Log', DAILY_CAPACITY: 8, WEEKLY_TARGET: 40 }, window.APP_CONFIG || {});
+  var CFG = Object.assign({ API_URL: '', TITLE: 'Ministry of Information & Broadcasting Timesheet', DAILY_CAPACITY: 8, WEEKLY_TARGET: 40 }, window.APP_CONFIG || {});
   var DEMO = !CFG.API_URL;
   var TOKEN_KEY = 'mib.token';
 

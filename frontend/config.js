@@ -2,7 +2,7 @@
 // Leave API_URL empty to run in demo mode with sample data stored in this browser only.
 window.APP_CONFIG = {
   API_URL: "",
-  TITLE: "MIB Workload Log",
+  TITLE: "Ministry of Information & Broadcasting Timesheet",
   DAILY_CAPACITY: 8,   // hours per working day, used for utilisation
   WEEKLY_TARGET: 40    // hours per week shown on the member screen
 };
