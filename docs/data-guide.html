@@ -1,0 +1,267 @@
+<title>MIB Workload Data Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one reading column with wide bands for the flow, the access matrix and the setup tracks. Avian We. brand tokens. */
+:root {
+  --crimson: #a50550; --maroon: #7f043b; --ink-accent: #691337;
+  --bg: #f6f5f7; --surface: #ffffff; --fg: #2a2a2d; --muted: #6e6a72; --line: #e7e3ea; --tint: #fbeaf1; --tint-2: #fdf4f8;
+  --ok: #17784f; --ok-t: #e3f4ec; --no: #b3261e; --no-t: #fde8e8; --part: #a15c00; --part-t: #fdf0da;
+  --display: "Plus Jakarta Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", Roboto, Arial, sans-serif;
+  --grad: linear-gradient(135deg, #b4085a 0%, #a50550 35%, #7f043b 75%, #4f0225 100%);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --crimson: #e2457f; --maroon: #c23a72; --ink-accent: #f08bb2;
+  --bg: #17121a; --surface: #211a24; --fg: #ece7ee; --muted: #a79fad; --line: #352c3a; --tint: #3a1a2a; --tint-2: #2a1a24;
+  --ok: #5fcf9c; --ok-t: #163327; --no: #f08080; --no-t: #3a1c1e; --part: #f0b45c; --part-t: #3a2c15; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --crimson: #e2457f; --maroon: #c23a72; --ink-accent: #f08bb2;
+  --bg: #17121a; --surface: #211a24; --fg: #ece7ee; --muted: #a79fad; --line: #352c3a; --tint: #3a1a2a; --tint-2: #2a1a24;
+  --ok: #5fcf9c; --ok-t: #163327; --no: #f08080; --no-t: #3a1c1e; --part: #f0b45c; --part-t: #3a2c15; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--body); padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 1040px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--display); letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.5rem; font-weight: 800; }
+h3 { font-size: 1.02rem; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--display); font-size: .74rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--crimson); }
+section { margin-top: 56px; display: grid; gap: 18px; }
+.lede { color: var(--muted); max-width: 64ch; }
+
+/* Hero */
+.hero { margin-top: 24px; border-radius: 20px; padding: 36px 32px; color: #fff; background: var(--grad); position: relative; overflow: hidden; }
+.hero::after { content: ""; position: absolute; width: 420px; height: 420px; right: -140px; top: -160px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.18), transparent 70%); }
+.hero .eyebrow { color: #ffd3e4; }
+.hero h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; line-height: 1.08; margin: 10px 0 12px; max-width: 18ch; }
+.hero p { max-width: 58ch; color: rgba(255,255,255,.88); font-size: 1.05rem; }
+.promise { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.promise span { font-family: var(--display); font-size: .82rem; font-weight: 700; padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); }
+
+/* Flow */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+.node { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 16px; display: grid; gap: 6px; align-content: start; position: relative; min-width: 0; }
+.node.key { border-color: var(--crimson); box-shadow: 0 0 0 3px var(--tint); }
+.node .tag { font-family: var(--display); font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.node h3 { font-size: .98rem; }
+.node p { font-size: .88rem; color: var(--muted); }
+.node .holds { margin-top: 6px; font-family: var(--display); font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; justify-self: start; }
+.holds.none { background: var(--ok-t); color: var(--ok); }
+.holds.data { background: var(--tint); color: var(--ink-accent); }
+.arrow { display: flex; align-items: center; justify-content: center; color: var(--crimson); font-family: var(--display); font-weight: 800; }
+.flow-row { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr 28px 1fr; align-items: stretch; }
+.flow-row .arrow svg { width: 22px; height: 22px; }
+
+/* Access matrix */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+table { border-collapse: collapse; width: 100%; min-width: 860px; font-size: .92rem; }
+th, td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+thead th { font-family: var(--display); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); background: var(--tint-2); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child b { font-family: var(--display); display: block; }
+td:first-child span { color: var(--muted); font-size: .84rem; }
+.c { display: inline-flex; align-items: center; gap: 6px; font-family: var(--display); font-size: .76rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.c::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.c.y { background: var(--ok-t); color: var(--ok); }
+.c.n { background: var(--no-t); color: var(--no); }
+.c.p { background: var(--part-t); color: var(--part); }
+
+/* Storage cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card .where { font-size: .84rem; color: var(--muted); }
+.tabs-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs-list code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem; padding: 3px 8px; border-radius: 6px; background: var(--tint-2); border: 1px solid var(--line); }
+.card ul { margin: 0; padding-left: 18px; font-size: .9rem; display: grid; gap: 4px; }
+.lock { font-family: var(--display); font-size: .74rem; font-weight: 700; color: var(--ink-accent); }
+
+
+/* Workbook */
+.book { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; align-content: start; min-width: 0; }
+.sheet .bar { height: 30px; background: var(--grad); }
+.card.mode { border-top-width: 4px; }
+.card.mode.office { border-top-color: var(--maroon); }
+.card.mode.wfh { border-top-color: var(--fg); }
+.card.mode.leave { border-top-color: var(--crimson); }
+.mgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.mgrid i { height: 12px; border-radius: 3px; background: var(--tint); }
+.mgrid i.w { background: var(--line); }
+.mgrid i.l { background: var(--crimson); }
+.sheet .body { padding: 14px 16px 16px; display: grid; gap: 8px; }
+.sheet .mini { display: grid; gap: 4px; }
+.sheet .mini i { display: block; height: 7px; border-radius: 4px; background: var(--tint); }
+.sheet .mini i.f { background: var(--crimson); }
+.sheet p { font-size: .88rem; color: var(--muted); }
+.heat { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.heat i { aspect-ratio: 1; border-radius: 3px; background: var(--crimson); max-width: 100%; }
+
+/* Setup tracks */
+.switch { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--line); justify-self: start; }
+.switch button { border: 0; background: none; padding: 9px 18px; border-radius: 9px; font: 600 .92rem var(--display); color: var(--muted); cursor: pointer; }
+.switch button[aria-selected="true"] { background: var(--surface); color: var(--ink-accent); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.switch button:focus-visible { outline: 3px solid var(--tint); outline-offset: 2px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+ol.steps li::before { content: counter(s); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #fff; font: 800 .9rem var(--display); }
+ol.steps b { font-family: var(--display); }
+ol.steps p { font-size: .92rem; color: var(--muted); margin-top: 2px; }
+ol.steps code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .84rem; color: var(--ink-accent); }
+
+.note { border-left: 4px solid var(--part); background: var(--part-t); border-radius: 0 12px 12px 0; padding: 14px 18px; font-size: .94rem; }
+.note b { font-family: var(--display); }
+footer { margin-top: 48px; color: var(--muted); font-size: .84rem; }
+
+@media (max-width: 860px) {
+  .flow-row { grid-template-columns: 1fr; gap: 0; }
+  .flow-row .arrow { height: 30px; transform: rotate(90deg); }
+  .book { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .hero { padding: 26px 20px; }
+  .book { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .node, .card, .sheet { transition: transform .2s ease; }
+  .node:hover, .card:hover, .sheet:hover { transform: translateY(-2px); }
+}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Ministry of Information &amp; Broadcasting Timesheet | Avian We.</p>
+    <h1>Where the data lives and who can see it</h1>
+    <p>A plain guide to how team entries and work mode are stored, who can open what, how the reports and Excel exports work, and how to connect the system to a Google Drive.</p>
+    <div class="promise"><span>Members see only their own entries</span><span>The director sees everyone</span><span>Office, WFH or leave ticked daily</span><span>No plain passwords stored</span><span>Zero cost</span></div>
+  </header>
+
+  <section aria-labelledby="flowH">
+    <p class="eyebrow">The journey of one entry</p>
+    <h2 id="flowH">From a member's screen to the director's report</h2>
+    <p class="lede">The website never stores anything. Every request goes through one script that runs under the owner's Google account, checks who is asking, and only then reads or writes the sheet.</p>
+    <div class="flow-row">
+      <div class="node"><span class="tag">1. Browser</span><h3>Team member</h3><p>Signs in with user ID and password. Logs tasks and hours, and ticks In office, WFH or On leave.</p><span class="holds none">Holds no data</span></div>
+      <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="node"><span class="tag">2. GitHub Pages</span><h3>The website</h3><p>Only the screens. Public link, but nothing shows without signing in.</p><span class="holds none">Holds no data</span></div>
+      <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="node key"><span class="tag">3. Apps Script</span><h3>The gatekeeper</h3><p>Checks the session, reads the role from the sheet, filters every read and write by the caller's user ID.</p><span class="holds data">Only door to the data</span></div>
+      <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="node key"><span class="tag">4. Owner's Drive</span><h3>MIB Workload Log sheet</h3><p>Users, Entries, Roster and Attendance tabs. Never shared with anyone.</p><span class="holds data">Master data</span></div>
+      <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="node"><span class="tag">5. Every hour</span><h3>Reports workbook</h3><p>Branded dashboard, monthly heat map, attendance, all entries. Download as Excel or CSV.</p><span class="holds data">Work data only</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="accH">
+    <p class="eyebrow">Access</p>
+    <h2 id="accH">Who can see what</h2>
+    <p class="lede">A member request has no field that can point at another person. The script decides whose data to return from the signed-in session, and the director role is read from the sheet, never from the browser. Automated tests try to read, edit and delete another member's entries, and every attempt is refused.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Person</th><th>Own entries</th><th>Other members' entries</th><th>Work mode</th><th>Accounts and resets</th><th>Reports workbook</th><th>Raw sheet and password data</th></tr></thead>
+        <tbody>
+          <tr><td><b>Team member</b><span>mib01 to mib21, via the website</span></td><td><span class="c y">Add, edit, delete (7 days)</span></td><td><span class="c n">Never</span></td><td><span class="c p">Own days only</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td></tr>
+          <tr><td><b>Account director</b><span>Bireshwar Chakravarty, admin login</span></td><td><span class="c y">Yes</span></td><td><span class="c y">Read all, export CSV</span></td><td><span class="c y">Everyone's, plus today's attendance</span></td><td><span class="c y">Create, reset, deactivate</span></td><td><span class="c p">If signed in as owner</span></td><td><span class="c n">Not through the site</span></td></tr>
+          <tr><td><b>Drive owner</b><span>the Google account that holds the sheet</span></td><td><span class="c y">Yes</span></td><td><span class="c y">Yes</span></td><td><span class="c y">Yes</span></td><td><span class="c y">Yes</span></td><td><span class="c y">Yes, plus Excel download</span></td><td><span class="c p">Hashes only, never plain passwords</span></td></tr>
+          <tr><td><b>Someone you share reports with</b><span>view-only link, your choice</span></td><td><span class="c n">No site access</span></td><td><span class="c p">Yes, in the workbook</span></td><td><span class="c p">Yes, in the workbook</span></td><td><span class="c n">No</span></td><td><span class="c p">View only</span></td><td><span class="c n">No</span></td></tr>
+          <tr><td><b>Anyone else</b><span>with the website link</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td><td><span class="c n">No</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="stoH">
+    <p class="eyebrow">Storage</p>
+    <h2 id="stoH">What is stored, and where</h2>
+    <div class="grid">
+      <article class="card"><h3>Data sheet</h3><p class="where">MIB Workload Log, owner's Drive</p><div class="tabs-list"><code>Users</code><code>Entries</code><code>Roster</code><code>Attendance</code><code>Credentials</code></div><ul><li>Users holds names, roles and salted password hashes.</li><li>Entries holds date, task, category, platform, hours, status, notes.</li><li>Attendance holds one tick per member per day: In office, WFH or On leave.</li><li>Credentials is temporary. Delete it after handing out first passwords.</li></ul><span class="lock">Never share this file</span></article>
+      <article class="card"><h3>Reports workbook</h3><p class="where">MIB Workload Reports, same Drive</p><div class="tabs-list"><code>Dashboard</code><code>Monthly</code><code>Attendance</code><code>All entries</code><code>Read me</code></div><ul><li>Built from the data sheet every hour, or on demand from the menu.</li><li>No Users tab and no password data.</li><li>Safe to download as Excel or share view-only with leadership.</li></ul><span class="lock">Share view-only, if at all</span></article>
+      <article class="card"><h3>Backups</h3><p class="where">Same Drive, every Monday</p><ul><li>A full copy named MIB Workload Log backup with the date.</li><li>The last 8 weeks are kept, older copies go to the bin.</li></ul><span class="lock">Owner only</span></article>
+      <article class="card"><h3>Sessions</h3><p class="where">Apps Script cache</p><ul><li>A random token per sign-in, up to 6 hours.</li><li>Ends on sign-out, password change, reset or deactivation.</li><li>5 wrong passwords lock the ID for 15 minutes.</li></ul><span class="lock">Expires on its own</span></article>
+    </div>
+  </section>
+
+
+  <section aria-labelledby="modeH">
+    <p class="eyebrow">Work mode</p>
+    <h2 id="modeH">In office, WFH or On leave</h2>
+    <p class="lede">Each member ticks one option per day on their own page. It takes one click, can be changed or cleared, and can be set for any day in the last 7.</p>
+    <div class="grid">
+      <article class="card mode office"><h3>In office</h3><p class="where">Counted as a normal working day.</p></article>
+      <article class="card mode wfh"><h3>WFH</h3><p class="where">Counted as a normal working day. Shown with a charcoal dot on the director's heat map.</p></article>
+      <article class="card mode leave"><h3>On leave</h3><p class="where">Taken out of capacity, so the member is never flagged as low load for that day.</p></article>
+      <article class="card"><h3>Who sees it</h3><p class="where">The member sees their own days. The director sees today's attendance for the whole team and every day in the reports workbook.</p></article>
+    </div>
+    <p class="lede">Capacity is 8 hours per working day, minus any day ticked On leave. Utilisation is hours logged divided by capacity. Above 110 percent is flagged over capacity, below 60 percent is flagged low.</p>
+  </section>
+
+  <section aria-labelledby="bookH">
+    <p class="eyebrow">Google Sheets and Excel</p>
+    <h2 id="bookH">The reports workbook</h2>
+    <p class="lede">A separate, branded spreadsheet the director can open, download as Excel, or share view-only. It refreshes every hour, and the MIB Workload menu in the data sheet refreshes it for this week, last week, this month or the last 30 days.</p>
+    <div class="book">
+      <div class="sheet"><div class="bar"></div><div class="body"><h3>Dashboard</h3><div class="mini"><i class="f" style="width:90%"></i><i class="f" style="width:72%"></i><i class="f" style="width:58%"></i><i style="width:100%"></i></div><p>Four headline figures, workload by member with flags and office, WFH and leave days, category and status split, hours per day, and three charts.</p></div></div>
+      <div class="sheet"><div class="bar"></div><div class="body"><h3>Monthly</h3><div class="heat" aria-hidden="true"><i style="opacity:.2"></i><i style="opacity:.5"></i><i style="opacity:.9"></i><i style="opacity:.4"></i><i style="opacity:.7"></i><i style="opacity:1"></i><i style="opacity:.6"></i><i style="opacity:.3"></i><i style="opacity:.8"></i><i style="opacity:.5"></i><i style="opacity:.2"></i><i style="opacity:.7"></i></div><p>Hours per member per month for 12 months. Darker cells mean more hours.</p></div></div>
+      <div class="sheet"><div class="bar"></div><div class="body"><h3>Attendance</h3><div class="mgrid" aria-hidden="true"><i></i><i class="w"></i><i></i><i></i><i class="l"></i><i></i><i></i><i></i><i class="w"></i><i></i><i></i><i class="w"></i></div><p>Office, WFH or leave for every member and day of the period.</p></div></div>
+      <div class="sheet"><div class="bar"></div><div class="body"><h3>All entries</h3><div class="mini"><i style="width:100%"></i><i style="width:100%"></i><i style="width:100%"></i><i style="width:100%"></i></div><p>Every entry as a flat table with a filter on each column. The tab to export.</p></div></div>
+      <div class="sheet"><div class="bar"></div><div class="body"><h3>Read me</h3><div class="mini"><i style="width:60%"></i><i style="width:85%"></i><i style="width:70%"></i></div><p>Definitions for capacity, utilisation, flags and hours, plus export instructions.</p></div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>Excel (.xlsx)</h3><p class="where">Reports workbook, File &gt; Download &gt; Microsoft Excel. The MIB Workload menu also gives a direct link. Formatting and load bars carry over; charts usually convert to Excel charts.</p></div>
+      <div class="card"><h3>CSV</h3><p class="where">Website, director view &gt; Entries &gt; Export CSV. Or All entries tab &gt; File &gt; Download &gt; CSV.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="setH">
+    <p class="eyebrow">Google Drive</p>
+    <h2 id="setH">Connect a Google Drive</h2>
+    <div class="switch" role="tablist" aria-label="Setup track">
+      <button id="tabNew" role="tab" aria-selected="true" aria-controls="trackNew">First-time setup</button>
+      <button id="tabMove" role="tab" aria-selected="false" aria-controls="trackMove">Move to a new Drive</button>
+    </div>
+    <ol class="steps" id="trackNew" role="tabpanel" aria-labelledby="tabNew">
+      <li><div><b>Use a Google account only you control</b><p>A fresh account keeps MIB data apart from personal files. Its Drive will hold everything.</p></div></li>
+      <li><div><b>Create the sheet</b><p>Drive &gt; New &gt; Google Sheets. Name it <code>MIB Workload Log</code>. Do not share it.</p></div></li>
+      <li><div><b>Add the two script files</b><p>Extensions &gt; Apps Script. Paste <code>Code.gs</code>. Then + &gt; Script, name it Reports, paste <code>Reports.gs</code>. Save.</p></div></li>
+      <li><div><b>Run setup</b><p>Run <code>setup</code> and accept the permission prompts. It creates the Attendance tab and the admin account for Bireshwar Chakravarty. The first password appears on the Credentials tab.</p></div></li>
+      <li><div><b>Add the team</b><p>Fill the Roster tab with name and role, run <code>createUsersFromRoster</code>, hand out the passwords privately, delete the Credentials tab.</p></div></li>
+      <li><div><b>Turn on reports and backups</b><p>Run <code>installTriggers</code> once. Reload the sheet to see the MIB Workload menu.</p></div></li>
+      <li><div><b>Publish the script</b><p>Deploy &gt; New deployment &gt; Web app. Execute as Me, access Anyone. Copy the URL.</p></div></li>
+      <li><div><b>Point the website at it</b><p>Put the URL in <code>frontend/config.js</code> as <code>API_URL</code> and push to main. The site redeploys on its own and leaves demo mode.</p></div></li>
+    </ol>
+    <ol class="steps" id="trackMove" role="tabpanel" aria-labelledby="tabMove" hidden>
+      <li><div><b>Copy the data sheet into the new account</b><p>File &gt; Make a copy into the new Drive. A copy brings both script files with it.</p></div></li>
+      <li><div><b>Check the scripts</b><p>Extensions &gt; Apps Script. If you uploaded an .xlsx instead of copying, paste <code>Code.gs</code> and <code>Reports.gs</code> again.</p></div></li>
+      <li><div><b>Turn on reports and backups</b><p>Run <code>installTriggers</code>. Triggers do not move with a copy. The first refresh creates a new reports workbook.</p></div></li>
+      <li><div><b>Publish the new script</b><p>Deploy &gt; New deployment &gt; Web app, Execute as Me, access Anyone. Copy the new URL.</p></div></li>
+      <li><div><b>Update the website</b><p>Replace <code>API_URL</code> in <code>frontend/config.js</code> and push to main.</p></div></li>
+      <li><div><b>Tell the team to sign in again</b><p>Accounts and passwords carry over in the Users tab. Only sessions reset.</p></div></li>
+      <li><div><b>Retire the old account's copies</b><p>Archive the old deployment, then delete the old sheet, its backups and its reports workbook.</p></div></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="chkH">
+    <p class="eyebrow">Before rollout</p>
+    <h2 id="chkH">Still to confirm</h2>
+    <div class="note"><b>Not yet run on Google's servers.</b> The scripts are tested against simulated Google services: 74 backend checks, including every cross-member access attempt for entries and work mode. The real Apps Script runtime, the chart and formatting calls in the reports workbook, and quotas for 21 users still need a first live run.</div>
+    <div class="note"><b>Governance.</b> MIB work data will sit in a Google account outside Avian We. systems, and the director can read every entry. Get internal approval and tell the team before rollout.</div>
+  </section>
+
+  <footer>Ministry of Information &amp; Broadcasting Timesheet &copy;Avian We. Source and setup notes live in the project README.</footer>
+</div>
+
+<script>
+(function () {
+  var tabs = [document.getElementById('tabNew'), document.getElementById('tabMove')];
+  var panels = [document.getElementById('trackNew'), document.getElementById('trackMove')];
+  function show(i) {
+    tabs.forEach(function (t, j) { t.setAttribute('aria-selected', String(i === j)); });
+    panels.forEach(function (p, j) { p.hidden = i !== j; });
+  }
+  tabs.forEach(function (t, i) { t.addEventListener('click', function () { show(i); }); });
+  if (location.hash === '#move') show(1);
+})();
+</script>

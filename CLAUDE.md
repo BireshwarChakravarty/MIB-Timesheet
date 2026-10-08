@@ -19,7 +19,11 @@ Goal: a timesheet-style dashboard where each team member logs tasks and hours so
 4. Chosen: GitHub Pages frontend + Google Apps Script backend + Google Sheet as database, in a fresh Google account only the owner controls.
 
 ## What is built (all in this folder)
-- `frontend/` plain HTML, CSS, JS, no build step. `config.js` has `API_URL`. Empty `API_URL` runs a demo mode with a simulated backend in `localStorage` (mock inside `app.js`).
+- `frontend/` plain HTML, CSS, JS, no build step. `config.js` has `API_URL`, `TITLE` (Ministry of Information & Broadcasting Timesheet) and `SHORT_TITLE` (MIB Timesheet, shown below 1100px). Empty `API_URL` runs a demo mode with a simulated backend in `localStorage` (mock inside `app.js`, storage key `mibdemo.v3`; bump the key to reseed every browser).
+  - Sign-in: animated crimson panel with Ministry / Government Practice / Avian We. lockup and glass preview card; logo on the right.
+  - Member page: work mode card (In office / WFH / On leave ticks, 7-day window), today / week / streak cards, entry form with quick hours and Log again, insights (week chart, 4-week calendar, time by category, status), entries as day cards with a time bar split by task. Hours shown as h and m.
+  - Director: Overview (figures, Needs attention, task status, today's attendance, workload table, who-logged-when heat map, hours per day, category, platform, role), Entries (filters, summary strip, CSV), Team (counts, make-up by role, accounts with period hours and last sign-in).
+- `docs/data-guide.html` source of the shareable data guide published at https://claude.ai/artifact/Ro8yhn8iVsUU4MRzQULiTn (private to the owner until shared).
 - `backend/Code.gs` Apps Script web app. Actions: login, me, logout, changePassword, myEntries (returns own attendance too), addEntry, updateEntry, deleteEntry, setMyDay (In office / WFH / On leave, own days only, Attendance tab), adminEntries, adminUsers, adminCreateUser, adminResetPassword, adminSetActive. Setup functions: `setup`, `createUsersFromRoster`, `benchmarkHash`, `weeklyBackup`.
 - `backend/Reports.gs` second Apps Script file. Builds a separate `MIB Workload Reports` spreadsheet (Dashboard with charts, Monthly heat map, Attendance, All entries, Read me) with no Users data, so it can be exported to Excel or shared view-only. `MIB Workload` menu via `onOpen`; `installTriggers` sets hourly refresh and Monday backup. Rendering calls (charts, banding, conditional formats) have NOT run in Google's runtime; the pure data functions are tested.
 - `tests/backend.test.js` runs the real `Code.gs` in Node against stubbed Google services. 74 checks pass, including cross-member read, edit and delete attempts on entries and work mode, and the reports data functions.
@@ -28,6 +32,12 @@ Goal: a timesheet-style dashboard where each team member logs tasks and hours so
 
 ## Design
 Plus Jakarta Sans (headings, figures, labels) and Source Sans 3 (body, matches avianwe.com). Colours are sampled from the avianwe.com header: crimson `#a50550`, maroon `#7f043b`, nav maroon `#691337`, charcoal `#363636`. Category colours (`CAT_COLORS` in `app.js`) stay inside this family; do not introduce off-brand hues. Green, amber and red are used only for status meaning. All tokens are CSS variables at the top of `frontend/styles.css`; swap in the official guideline values when available. Logo PNGs in `frontend/assets/` are cut from a screenshot (low resolution); replace with official files at the same names. `frontend/motion.js` plays entrance animations only when the screen or admin tab changes, counts up headline figures, and is disabled under prefers-reduced-motion.
+
+## Current state (8 Oct 2026)
+- Live demo: https://bireshwarchakravarty.github.io/MIB-Timesheet/ (GitHub Pages from `main`, deploys on any push touching `frontend/`). PRs 1 to 8 merged.
+- Admin account is Bireshwar Chakravarty (Account Director). Demo logins: admin / Admin@123, mib01 to mib07 / Welcome@01, mib08 / Welcome@01 (first sign-in flow).
+- Backend not yet deployed to Google. Next step for the owner: create the sheet, paste `Code.gs` and `Reports.gs`, run `setup`, `createUsersFromRoster`, `benchmarkHash`, `installTriggers`, deploy as web app, put the URL in `frontend/config.js`.
+- Colour rule: brand family only (crimson, maroon, rose, blush, wine, charcoal). Green, amber, red only for task status and capacity flags. Work modes: Office maroon, WFH charcoal, Leave crimson stripes.
 
 ## Not verified, do these before rollout
 - `Code.gs` has never run in Google's real runtime. Deploy, then run `benchmarkHash`. If one hash takes more than about 700 ms, lower `CFG.PBKDF_ROUNDS`.
