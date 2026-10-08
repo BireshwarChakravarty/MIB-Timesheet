@@ -338,7 +338,7 @@
       '<button class="linkbtn" id="btnReset" type="button" style="color:var(--plum)">Reset demo data</button></div>' : '';
     app.innerHTML = '<div class="login">' +
       '<aside class="login-aside"><div class="aside-tag"><b>Ministry of Information &amp; Broadcasting</b><span>Government Practice</span><span>Avian We.</span></div>' +
-      '<div class="aside-copy"><h1>Log the work.<br>See the load.</h1><p>The MIB team\'s daily work, in one place. Log each task and the time it took. Your entries stay between you and the account director, who uses them to keep workload balanced across the team.</p></div>' +
+      '<div class="aside-copy"><h1>Log the work.<br>See the load.</h1><p>Log your daily tasks and time. Your entries stay private.</p></div>' +
       '<div class="glass" aria-hidden="true"><div class="glass-top"><div><small>This week</small><b>166 h</b></div><span class="glass-pill">On track</span></div>' +
       '<div class="glass-bars">' + [['Mon', 62], ['Tue', 80], ['Wed', 74], ['Thu', 91], ['Fri', 48]].map(function (b) {
         return '<div><i style="height:' + b[1] + '%"></i><span>' + b[0] + '</span></div>'; }).join('') + '</div>' +
