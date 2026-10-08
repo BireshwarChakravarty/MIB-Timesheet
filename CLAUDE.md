@@ -1,0 +1,49 @@
+# Project handoff: MIB Workload Log
+
+Read this first. It replaces the chat history that produced this project.
+
+## Owner and goal
+Bireshwar Chakravarty (Bir), Director of Digital, Avian We. (Avian Media Pvt. Ltd., a We. Communications company), New Delhi. He runs the MIB (Ministry of Information and Broadcasting) account. The MIB team has 21 members across these roles: Team Lead, Content Lead, Social Media Executive, English Content Writer, Hindi Content Writer, Graphic Designer, Video Editor.
+
+Goal: a timesheet-style dashboard where each team member logs tasks and hours so Bir can see workload. Requirements stated by the owner:
+- Every member has a unique user ID and password.
+- No member can see another member's entries.
+- Bir (admin) sees everything.
+- Zero cost. Internal tool.
+- Institutional, professional design referencing Avian We. colours.
+
+## Decisions made
+1. Rejected: Node/Express + SQLite on company hosting (needs IT hosting, which the owner wants to avoid for now). Kept as fallback if IT refuses an external Google account.
+2. Rejected: GitHub Pages alone (static, cannot keep data private).
+3. Rejected: Supabase (owner does not want to spend money; free tier pauses).
+4. Chosen: GitHub Pages frontend + Google Apps Script backend + Google Sheet as database, in a fresh Google account only the owner controls.
+
+## What is built (all in this folder)
+- `frontend/` plain HTML, CSS, JS, no build step. `config.js` has `API_URL`. Empty `API_URL` runs a demo mode with a simulated backend in `localStorage` (mock inside `app.js`).
+- `backend/Code.gs` Apps Script web app. Actions: login, me, logout, changePassword, myEntries, addEntry, updateEntry, deleteEntry, adminEntries, adminUsers, adminCreateUser, adminResetPassword, adminSetActive. Setup functions: `setup`, `createUsersFromRoster`, `benchmarkHash`, `weeklyBackup`.
+- `tests/backend.test.js` runs the real `Code.gs` in Node against stubbed Google services. 47 checks pass, including cross-member read, edit and delete attempts.
+- `tests/ui.test.py` Playwright smoke test of the demo mode. 17 checks pass.
+- `README.md` deployment steps.
+
+## Design
+Source Serif 4 (headings, figures) and Source Sans 3 (body). Palette is an approximation of Avian We. branding: deep plum, maroon and dark pink, taken from descriptions on avianwe.com. The site publishes no hex values, so every colour is a CSS variable at the top of `frontend/styles.css`. Replace with the official guideline values when available. The official logo is not embedded: save it as `frontend/assets/logo.svg` (a text wordmark shows until then).
+
+## Not verified, do these before rollout
+- `Code.gs` has never run in Google's real runtime. Deploy, then run `benchmarkHash`. If one hash takes more than about 700 ms, lower `CFG.PBKDF_ROUNDS`.
+- Apps Script quotas and latency for 21 users are untested.
+- Governance: MIB work data would sit in a Google account outside Avian We. systems. The owner needs internal approval. The director can read all entries, so the team must be told.
+- Repo: github.com/BireshwarChakravarty/MIB-Timesheet. Pages deploys `/frontend` via `.github/workflows/pages.yml`; set Settings > Pages > Source to GitHub Actions. Free GitHub Pages needs a public repo.
+
+## Known gaps and ideas
+- Roster of real names and roles for the 21 members has not been provided. Demo uses placeholder names.
+- Hashing is salted iterated SHA-256 (no bcrypt in Apps Script). Acceptable for this use, below industry standard.
+- Sessions use CacheService (max 6 hours, may expire earlier).
+- Entries are filtered in memory per request. Archive old rows if the sheet grows large.
+- Possible additions: weekly email summary to the admin, per-project or per-deliverable tagging, leave and holiday handling in capacity.
+
+## Owner's working preferences
+- No em dashes or en dashes anywhere, including code comments and UI text.
+- Company name is written "Avian We." with the full stop.
+- Blunt, direct output with no filler. If something cannot be done, say so immediately.
+- Do not fabricate. Mark anything unverified as unverified.
+- Deliver the final output on the first attempt.
