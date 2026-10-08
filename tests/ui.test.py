@@ -63,6 +63,9 @@ with sync_playwright() as p:
     page.locator("[data-del]").first.click()
     page.wait_for_function("document.querySelectorAll('.entry').length == %d" % before)
     check("delete removes entry", page.locator(".entry").count() == before)
+    page.click(".mode-opt.wfh")
+    page.wait_for_selector(".mode-opt.wfh.on")
+    check("member ticks WFH for today", page.get_attribute(".mode-opt.wfh", "aria-checked") == "true" and page.locator(".mode-opt.on").count() == 1)
     page.click("#btnOut"); page.wait_for_selector("#loginForm")
 
     # admin flow

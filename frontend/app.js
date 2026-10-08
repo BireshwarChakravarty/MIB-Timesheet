@@ -64,13 +64,14 @@
   /* The real rules are enforced and tested in backend/Code.gs.          */
   /* ------------------------------------------------------------------ */
   var Mock = (function () {
-    var KEY = 'mibdemo.v2'; // bump to give every browser fresh sample data
+    var KEY = 'mibdemo.v3'; // bump to give every browser fresh sample data
     var OPTIONS = {
       categories: ['Content writing (English)', 'Content writing (Hindi)', 'Graphic design', 'Video editing',
         'Community Notes', 'Social media posting', 'Monitoring and reporting', 'Client coordination',
         'Internal and admin', 'Other'],
       platforms: ['X', 'Instagram', 'Facebook', 'YouTube', 'WhatsApp channel', 'Website', 'Multiple platforms', 'Not applicable'],
       statuses: ['Completed', 'In progress', 'Blocked'],
+      modes: ['In office', 'WFH', 'On leave'],
       editWindowDays: 7
     };
     var ROLES = ['Team Lead', 'Content Lead', 'Social Media Executive', 'English Content Writer',
@@ -96,7 +97,7 @@
     }
     function seed() {
       rng = mulberry(20261009);
-      var users = [{ userId: 'admin', name: 'Account Director', role: 'admin', teamRole: 'Director', password: 'Admin@123', active: true, mustChange: false, lastLogin: '' }];
+      var users = [{ userId: 'admin', name: 'Bireshwar Chakravarty', role: 'admin', teamRole: 'Account Director', password: 'Admin@123', active: true, mustChange: false, lastLogin: '' }];
       var load = { mib03: 10.8, mib06: 4.2, mib05: 8.6 };
       for (var i = 1; i <= 8; i++) {
         var id = 'mib' + pad(i);
@@ -104,15 +105,19 @@
           password: 'Welcome@01', active: true, mustChange: i === 8,
           lastLogin: i === 8 ? '' : new Date(Date.now() - (i * 5 + 1) * 3600000).toISOString() });
       }
-      var entries = [], t = today(), n = 0;
+      var entries = [], attendance = [], t = today(), n = 0;
+      // Sample leave: one member is on leave today, another took a day off two weeks ago.
+      var leave = {}; leave['mib07|' + t] = 1; leave['mib02|' + addDays(mondayOf(t), -14)] = 1;
       users.forEach(function (u) {
         if (u.role !== 'member' || u.mustChange) return;
         var key = ROLES[0] && u.teamRole;
         var pool = TASKS[key] || TASKS['Social Media Executive'];
-        for (var d = 20; d >= 0; d--) {
+        for (var d = 27; d >= 0; d--) {
           var day = addDays(t, -d);
           if (!isWeekday(day)) continue;
+          if (leave[u.userId + '|' + day]) { attendance.push({ userId: u.userId, date: day, mode: 'On leave' }); continue; }
           if (day === t && rng() < 0.5) continue;
+          attendance.push({ userId: u.userId, date: day, mode: rng() < 0.24 ? 'WFH' : 'In office' });
           var target = (load[u.userId] || 7.4) + (rng() - 0.5) * 1.6;
           var parts = Math.min(pool.length, 2 + Math.floor(rng() * 2)), left = Math.round(target * 4) / 4;
           var order = pool.map(function (_, ix) { return ix; }).sort(function () { return rng() - 0.5; });
@@ -126,10 +131,10 @@
           }
         }
       });
-      return { seedDay: t, users: users, entries: entries, sessions: {}, fails: {}, nextEntry: n + 1 };
+      return { seedDay: t, users: users, entries: entries, attendance: attendance, sessions: {}, fails: {}, nextEntry: n + 1 };
     }
     function load() {
-      try { localStorage.removeItem('mibdemo.v1'); } catch (e) { /* ignore */ }
+      try { localStorage.removeItem('mibdemo.v1'); localStorage.removeItem('mibdemo.v2'); } catch (e) { /* ignore */ }
       try {
         var r = JSON.parse(localStorage.getItem(KEY));
         if (r && r.seedDay === today()) return r;
@@ -206,7 +211,17 @@
           return ok({ token: token });
         case 'myEntries':
           list = db.entries.filter(function (x) { return x.userId === user.userId && x.date >= (p.from || '0000') && x.date <= (p.to || '9999'); });
-          return ok({ entries: list.map(pubEntry) });
+          return ok({ entries: list.map(pubEntry), attendance: db.attendance.filter(function (x) {
+            return x.userId === user.userId && x.date >= (p.from || '0000') && x.date <= (p.to || '9999');
+          }).map(function (x) { return { date: x.date, mode: x.mode }; }) });
+        case 'setMyDay': {
+          var md = String(p.date || ''), mm = String(p.mode || '');
+          if (mm && OPTIONS.modes.indexOf(mm) < 0) return fail('invalid', 'Choose In office, WFH or On leave.');
+          var mwe = windowErr(md); if (mwe) return fail('invalid', mwe);
+          db.attendance = db.attendance.filter(function (x) { return !(x.userId === user.userId && x.date === md); });
+          if (mm) db.attendance.push({ userId: user.userId, date: md, mode: mm });
+          save(); return ok({ date: md, mode: mm });
+        }
         case 'addEntry': {
           var v = validate(p); if (v.error) return fail('invalid', v.error);
           var we = windowErr(v.entry.date); if (we) return fail('invalid', we);
@@ -236,7 +251,7 @@
           list = db.entries.filter(function (x) { return x.date >= (p.from || '0000') && x.date <= (p.to || '9999'); }).map(function (x) {
             var o = pubEntry(x); o.userId = x.userId; o.name = (userBy(x.userId) || {}).name || x.userId; return o;
           });
-          return ok({ entries: list });
+          return ok({ entries: list, attendance: db.attendance.filter(function (x) { return x.date >= (p.from || '0000') && x.date <= (p.to || '9999'); }) });
         case 'adminUsers':
           return ok({ users: db.users.map(function (x) { var o = pub(x); o.active = x.active; o.lastLogin = x.lastLogin; return o; }) });
         case 'adminCreateUser': {
@@ -415,13 +430,15 @@
   }
 
   function renderMember() {
-    S.member = S.member || { editing: null, entries: [] };
+    S.member = S.member || { editing: null, entries: [], attendance: [], view: '7', modeDay: today() };
     var t = today(), win = S.options.editWindowDays;
-    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + S.user.name) + '</p><h1>Log your work</h1>' +
-      '<p>Record each task and the hours you spent. Only you and the account director can see your entries.</p></div>' +
+    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + firstName(S.user.name)) + '</p><h1>Log your work</h1>' +
+      '<p>Record each task and the time it took. Only you and the account director can see your entries.</p></div>' +
       '<span class="date-chip">' + esc(fmtDay(t)) + '</span></div>' +
+      '<div class="m-top"><section class="panel mode-card" id="modeCard" aria-label="Work mode"></section><div class="m-figs" id="weekBox"></div></div>' +
       '<div class="grid-member"><div class="stack">' +
       '<section class="panel" aria-labelledby="formTitle"><div class="panel-head"><h2 id="formTitle">New entry</h2></div><div class="panel-body">' +
+      '<div id="again"></div>' +
       '<form id="entryForm" novalidate>' +
       '<div class="row2"><div class="field"><label for="f_date">Date</label><input id="f_date" type="date" max="' + t + '" min="' + addDays(t, -win) + '" value="' + t + '" required></div>' +
       '<div class="field"><label for="f_hours">Hours</label><input id="f_hours" type="number" min="0.25" max="16" step="0.25" inputmode="decimal" required><div class="hint" id="f_hoursHint">Quarter hours: 0.25 = 15 min, 0.5 = 30 min, 0.75 = 45 min</div></div></div>' +
@@ -438,8 +455,12 @@
       '<div class="form-actions"><button class="btn" type="submit" id="saveBtn">Save entry</button><button class="btn secondary" type="button" id="cancelEdit" hidden>Cancel</button></div>' +
       '</form></div></section>' +
       '<section class="panel insights" aria-labelledby="insTitle"><div class="panel-head"><h2 id="insTitle">Your week at a glance</h2></div><div id="insights"></div></section></div>' +
-      '<section class="panel" aria-labelledby="mineTitle"><div class="panel-head"><h2 id="mineTitle">Your recent entries</h2><span class="muted">Last 14 days</span></div>' +
-      '<div id="weekBox"></div><div id="entryList"></div></section></div></main>';
+      '<section class="panel entries-panel" aria-labelledby="mineTitle"><div class="panel-head"><h2 id="mineTitle">Your entries</h2>' +
+      '<div class="seg" role="group" aria-label="Show entries for">' +
+      [['7', 'Last 7 days'], ['week', 'This week'], ['28', '4 weeks']].map(function (v) {
+        return '<button type="button" data-view="' + v[0] + '" aria-pressed="' + (S.member.view === v[0]) + '">' + v[1] + '</button>';
+      }).join('') + '</div></div>' +
+      '<div id="listSum"></div><div id="entryList"></div></section></div></main>';
     bindHeader();
     $('#entryForm').addEventListener('submit', onSaveEntry);
     $('#cancelEdit').addEventListener('click', function () { S.member.editing = null; resetForm(); });
@@ -447,7 +468,19 @@
     $all('[data-q]').forEach(function (b) {
       b.addEventListener('click', function () { $('#f_hours').value = b.getAttribute('data-q'); hoursHint(); });
     });
+    $all('[data-view]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.member.view = b.getAttribute('data-view');
+        $all('[data-view]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+        renderList();
+      });
+    });
     loadMine();
+  }
+
+  function firstName(n) {
+    var p = String(n || '').trim().split(/\s+/);
+    return p.length > 1 && !/^\d+$/.test(p[p.length - 1]) ? p[0] : String(n || '');
   }
 
   function hoursHint() {
@@ -484,44 +517,139 @@
 
   function loadMine() {
     var t = today();
-    api('myEntries', { from: addDays(t, -13), to: t }).then(function (res) {
+    api('myEntries', { from: addDays(t, -27), to: t }).then(function (res) {
       if (!res.ok) return;
       S.member.entries = res.data.entries;
+      S.member.attendance = res.data.attendance || [];
       renderMine();
     });
   }
 
+  function myMode(d) {
+    var m = (S.member.attendance || []).filter(function (x) { return x.date === d; })[0];
+    return m ? m.mode : '';
+  }
+
   function renderMine() {
-    var t = today(), win = S.options.editWindowDays, list = S.member.entries;
+    var t = today(), list = S.member.entries;
     var wkStart = mondayOf(t);
     var wk = sum(list.filter(function (e) { return e.date >= wkStart; }), function (e) { return e.hours; });
     var td = sum(list.filter(function (e) { return e.date === t; }), function (e) { return e.hours; });
     var pct = Math.min(100, wk / CFG.WEEKLY_TARGET * 100);
-    $('#weekBox').innerHTML = '<div class="week-summary"><div class="week-figures">' +
-      '<div class="fig"><i class="ico ico-sun"></i><b>' + hm(td) + '</b><span>Today</span></div>' +
-      '<div class="fig"><i class="ico ico-cal"></i><b>' + hm(wk) + '</b><span>This week, target ' + CFG.WEEKLY_TARGET + 'h</span></div>' +
-      '<div class="fig"><i class="ico ico-avg"></i><b>' + (wk >= CFG.WEEKLY_TARGET ? 'Done' : hm(CFG.WEEKLY_TARGET - wk)) + '</b><span>' + (wk >= CFG.WEEKLY_TARGET ? 'Weekly target reached' : 'Left to weekly target') + '</span></div></div>' +
-      '<div class="meter' + (wk > CFG.WEEKLY_TARGET ? ' over' : '') + '" role="img" aria-label="' + hm(wk) + ' of ' + CFG.WEEKLY_TARGET + ' hours this week"><span style="width:' + pct + '%"></span></div>' +
-      '<div class="meter-scale"><span>0h</span><span>' + Math.round(pct) + '% of target</span><span>' + CFG.WEEKLY_TARGET + 'h</span></div></div>';
+    var streak = 0;
+    for (var c = isWeekday(t) && !list.some(function (e) { return e.date === t; }) ? addDays(t, -1) : t, k = 0; k < 28; k++, c = addDays(c, -1)) {
+      if (!isWeekday(c)) continue;
+      if (list.some(function (e) { return e.date === c; }) || myMode(c) === 'On leave') streak++; else break;
+    }
+    $('#weekBox').innerHTML =
+      '<div class="fig"><i class="ico ico-sun"></i><b>' + hm(td) + '</b><span>Logged today</span></div>' +
+      '<div class="fig wide"><i class="ico ico-cal"></i><b>' + hm(wk) + ' <small>of ' + CFG.WEEKLY_TARGET + 'h</small></b><span>' + (wk >= CFG.WEEKLY_TARGET ? 'Weekly target reached' : hm(CFG.WEEKLY_TARGET - wk) + ' left this week') + '</span>' +
+      '<div class="meter' + (wk > CFG.WEEKLY_TARGET ? ' over' : '') + '" role="img" aria-label="' + hm(wk) + ' of ' + CFG.WEEKLY_TARGET + ' hours this week"><span style="width:' + pct + '%"></span></div></div>' +
+      '<div class="fig"><i class="ico ico-avg"></i><b>' + streak + ' day' + (streak === 1 ? '' : 's') + '</b><span>Logging streak</span></div>';
+    renderModeCard();
+    renderAgain(list);
     renderInsights(list, t, wkStart);
-    if (!list.length) { $('#entryList').innerHTML = '<div class="empty">No entries yet. Add your first task using the form.</div>'; return; }
+    renderList();
+  }
+
+  function renderModeCard() {
+    var t = today(), win = S.options.editWindowDays, d = S.member.modeDay || t;
+    if (d > t || d < addDays(t, -win)) d = S.member.modeDay = t;
+    var cur = myMode(d);
+    var icons = { 'In office': '<path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 7h4M8 11h4M8 15h4"/>',
+      'WFH': '<path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-6h4v6"/>',
+      'On leave': '<path d="M12 3v2M5.6 5.6 7 7M3 12h2M17 7l1.4-1.4M19 12h2M8 12a4 4 0 0 1 8 0M3 17h18M6 21h12"/>' };
+    $('#modeCard').innerHTML =
+      '<div class="mode-head"><div><h2>Work mode</h2><span class="muted">Tick where you are working</span></div>' +
+      '<div class="mode-nav"><button type="button" class="nav-btn" id="modePrev" aria-label="Previous day"' + (d <= addDays(t, -win) ? ' disabled' : '') + '>&lsaquo;</button>' +
+      '<b>' + (d === t ? 'Today' : esc(fmtDay(d))) + '</b>' +
+      '<button type="button" class="nav-btn" id="modeNext" aria-label="Next day"' + (d >= t ? ' disabled' : '') + '>&rsaquo;</button></div></div>' +
+      '<div class="mode-opts" role="radiogroup" aria-label="Work mode for ' + esc(fmtDay(d)) + '">' +
+      S.options.modes.map(function (m) {
+        var on = cur === m;
+        return '<button type="button" role="radio" aria-checked="' + on + '" class="mode-opt ' + MODE_CLS[m] + (on ? ' on' : '') + '" data-mode="' + esc(m) + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icons[m] + '</svg>' +
+          '<span>' + esc(m) + '</span><i class="tick" aria-hidden="true"></i></button>';
+      }).join('') + '</div>';
+    $('#modePrev').addEventListener('click', function () { S.member.modeDay = addDays(d, -1); renderModeCard(); });
+    $('#modeNext').addEventListener('click', function () { S.member.modeDay = addDays(d, 1); renderModeCard(); });
+    $all('[data-mode]', $('#modeCard')).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var m = b.getAttribute('data-mode'), next = cur === m ? '' : m;
+        api('setMyDay', { date: d, mode: next }).then(function (res) {
+          if (!res.ok) { toast(res.message); return; }
+          S.member.attendance = (S.member.attendance || []).filter(function (x) { return x.date !== d; });
+          if (next) S.member.attendance.push({ date: d, mode: next });
+          toast(next ? 'Marked ' + next + (d === t ? ' for today' : ' for ' + fmtDay(d)) : 'Mark cleared');
+          renderMine();
+        });
+      });
+    });
+  }
+
+  function renderAgain(list) {
+    var seen = {}, recent = [];
+    list.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).forEach(function (e) {
+      var k = e.task + '|' + e.category + '|' + e.platform;
+      if (!seen[k] && recent.length < 4) { seen[k] = 1; recent.push(e); }
+    });
+    $('#again').innerHTML = recent.length ? '<div class="again"><span>Log again</span>' + recent.map(function (e, i) {
+      return '<button type="button" class="again-item" data-again="' + i + '" title="' + esc(e.category + ', ' + e.platform) + '">' + esc(e.task) + '</button>';
+    }).join('') + '</div>' : '';
+    $all('[data-again]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var e = recent[+b.getAttribute('data-again')];
+        $('#f_task').value = e.task; $('#f_cat').value = e.category; $('#f_plat').value = e.platform;
+        $('#f_hours').focus(); hoursHint();
+      });
+    });
+  }
+
+  function renderList() {
+    var t = today(), win = S.options.editWindowDays, list = S.member.entries, v = S.member.view;
+    var from = v === 'week' ? mondayOf(t) : v === '28' ? addDays(t, -27) : addDays(t, -6);
+    var shown = list.filter(function (e) { return e.date >= from; });
+    var hrs = sum(shown, function (e) { return e.hours; }), daysLogged = {};
+    shown.forEach(function (e) { daysLogged[e.date] = 1; });
+    var nDays = Object.keys(daysLogged).length;
+    $('#listSum').innerHTML = '<div class="sumstrip">' +
+      '<div><b>' + shown.length + '</b><span>Entries</span></div>' +
+      '<div><b>' + hm(hrs) + '</b><span>Total time</span></div>' +
+      '<div><b>' + nDays + '</b><span>Days logged</span></div>' +
+      '<div><b>' + hm(nDays ? hrs / nDays : 0) + '</b><span>Average per day</span></div></div>';
     var byDay = {};
-    list.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
-    var html = Object.keys(byDay).sort().reverse().map(function (d) {
-      var total = sum(byDay[d], function (e) { return e.hours; });
-      var editable = d >= addDays(t, -win);
-      return '<div class="day-head"><span>' + esc(fmtDay(d)) + '</span><span>' + hm(total) + '</span></div>' +
-        byDay[d].map(function (e) {
-          return '<article class="entry s-' + statusClass(e.status) + '"><div><div class="entry-task">' + esc(e.task) + '</div>' +
-            '<div class="entry-meta"><span>' + esc(e.category) + '</span><span>' + esc(e.platform) + '</span>' + statusBadge(e.status) + '</div></div>' +
-            '<div class="entry-hours">' + hm(e.hours) + '</div>' +
-            (e.notes ? '<div class="entry-note">' + esc(e.notes) + '</div>' : '') +
-            (editable ? '<div class="entry-actions"><button class="linkbtn" data-edit="' + esc(e.entryId) + '" type="button">Edit</button>' +
-              '<button class="linkbtn del" data-del="' + esc(e.entryId) + '" type="button">Delete</button></div>' : '') + '</article>';
-        }).join('');
+    shown.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
+    var days = [];
+    for (var c = t; c >= from; c = addDays(c, -1)) if (isWeekday(c) || byDay[c]) days.push(c);
+    var edit = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>';
+    var del = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+    var html = days.map(function (d) {
+      var es = byDay[d] || [], total = sum(es, function (e) { return e.hours; }), editable = d >= addDays(t, -win), m = myMode(d);
+      var head = '<div class="day-head"><span class="dh-date">' + esc(d === t ? 'Today, ' + fmtShort(d) : fmtDay(d)) + modeTag(m) + '</span>' +
+        '<span class="dh-total"><i class="dh-bar"><i style="width:' + Math.min(100, total / CFG.DAILY_CAPACITY * 100) + '%"></i></i>' + hm(total) + '</span></div>';
+      if (!es.length) {
+        return head + '<div class="day-empty">' + (m === 'On leave' ? 'On leave' : d === t ? 'Nothing logged yet today' : 'Nothing logged') +
+          (editable && m !== 'On leave' ? '<button type="button" class="chip" data-logday="' + d + '">Log time</button>' : '') + '</div>';
+      }
+      return head + es.map(function (e) {
+        return '<article class="entry s-' + statusClass(e.status) + '"><div class="entry-main"><div class="entry-task">' + esc(e.task) + '</div>' +
+          '<div class="entry-meta"><span>' + esc(e.category) + '</span><span>' + esc(e.platform) + '</span>' + statusBadge(e.status) + '</div>' +
+          (e.notes ? '<div class="entry-note">' + esc(e.notes) + '</div>' : '') + '</div>' +
+          '<div class="entry-side"><div class="entry-hours">' + hm(e.hours) + '</div>' +
+          (editable ? '<div class="entry-actions"><button class="icon-btn" data-edit="' + esc(e.entryId) + '" type="button" aria-label="Edit entry" title="Edit">' + edit + '</button>' +
+            '<button class="icon-btn del" data-del="' + esc(e.entryId) + '" type="button" aria-label="Delete entry" title="Delete">' + del + '</button></div>' : '<span class="locked" title="Older than ' + win + ' days">Locked</span>') +
+          '</div></article>';
+      }).join('');
     }).join('');
-    var box = $('#entryList'); box.innerHTML = html;
+    var box = $('#entryList');
+    box.innerHTML = html || '<div class="empty">No entries yet. Add your first task using the form.</div>';
     $all('[data-edit]', box).forEach(function (b) { b.addEventListener('click', function () { startEdit(b.getAttribute('data-edit')); }); });
+    $all('[data-logday]', box).forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.member.editing = null; resetForm(); $('#f_date').value = b.getAttribute('data-logday');
+        $('#entryForm').scrollIntoView({ behavior: 'smooth', block: 'start' }); $('#f_hours').focus();
+      });
+    });
     $all('[data-del]', box).forEach(function (b) {
       b.addEventListener('click', function () {
         if (!window.confirm('Delete this entry?')) return;
@@ -537,22 +665,36 @@
     var cap = CFG.DAILY_CAPACITY, days = [], max = cap;
     for (var i = 0; i < 7; i++) {
       var d = addDays(wkStart, i), v = sum(list.filter(function (e) { return e.date === d; }), function (e) { return e.hours; });
-      days.push({ d: d, v: v }); if (v > max) max = v;
+      days.push({ d: d, v: v, m: myMode(d) }); if (v > max) max = v;
     }
     max = max * 1.1;
+    var recent = list.filter(function (e) { return e.date >= addDays(t, -13); });
     var cats = {}, stat = { Completed: 0, 'In progress': 0, Blocked: 0 }, total = 0;
-    list.forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.hours; stat[e.status] = (stat[e.status] || 0) + 1; total += e.hours; });
+    recent.forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.hours; stat[e.status] = (stat[e.status] || 0) + 1; total += e.hours; });
     var catRows = Object.keys(cats).map(function (k) { return [k, cats[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5);
-    var best = days.slice().sort(function (a, b) { return b.v - a.v; })[0];
-    var letters = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // Four-week calendar, Monday to Friday, oldest week first.
+    var calStart = addDays(wkStart, -21), cal = '';
+    for (var w = 0; w < 4; w++) {
+      cal += '<span class="cal-wk">' + esc(fmtShort(addDays(calStart, w * 7))) + '</span>';
+      for (var j = 0; j < 5; j++) {
+        var cd = addDays(calStart, w * 7 + j), cv = sum(list.filter(function (e) { return e.date === cd; }), function (e) { return e.hours; }), cm = myMode(cd);
+        var lv = cd > t ? 'future' : cm === 'On leave' && !cv ? 'kleave' : !cv ? 'k0' : cv > cap * 1.1 ? 'kover' : cv >= cap * 0.75 ? 'k4' : cv >= cap * 0.4 ? 'k3' : 'k2';
+        cal += '<span class="cal-cell ' + lv + (cm === 'WFH' ? ' wfh' : '') + (cd === t ? ' today' : '') + '" title="' + esc(fmtDay(cd) + ': ' + hm(cv) + (cm ? ', ' + cm : '')) + '"></span>';
+      }
+    }
     $('#insights').innerHTML =
       '<div class="wk-chart" role="img" aria-label="Your hours per day this week">' +
       '<div class="wk-target" style="bottom:' + (cap / max * 100) + '%"><span>' + cap + 'h day</span></div>' +
       days.map(function (x, i) {
-        var cls = (x.d === t ? ' today' : '') + (x.d > t ? ' future' : '') + (x.v > cap * 1.1 ? ' over' : '');
-        return '<div class="wk-col' + cls + '" title="' + esc(fmtDay(x.d)) + ': ' + hm(x.v) + '">' +
-          '<em>' + (x.v ? hm(x.v) : '') + '</em><div style="height:' + (x.v / max * 100) + '%"></div><span>' + letters[i] + '</span></div>';
+        var cls = (x.d === t ? ' today' : '') + (x.d > t ? ' future' : '') + (x.v > cap * 1.1 ? ' over' : '') + (x.m === 'On leave' ? ' leave' : '');
+        return '<div class="wk-col' + cls + '" title="' + esc(fmtDay(x.d)) + ': ' + hm(x.v) + (x.m ? ', ' + x.m : '') + '">' +
+          '<em>' + (x.v ? hm(x.v) : x.m === 'On leave' ? 'Leave' : '') + '</em><div style="height:' + (x.v / max * 100) + '%"></div><span>' + labels[i] + '</span>' +
+          (x.m ? '<i class="wk-mode ' + MODE_CLS[x.m] + '" title="' + esc(x.m) + '"></i>' : '') + '</div>';
       }).join('') + '</div>' +
+      '<div class="wk-legend"><span><i class="wk-mode office"></i>Office</span><span><i class="wk-mode wfh"></i>WFH</span><span><i class="wk-mode leave"></i>Leave</span></div>' +
+      '<div class="ins-block"><h3>Last four weeks <small>darker means more hours</small></h3>' +
+      '<div class="cal"><span></span>' + ['M', 'T', 'W', 'T', 'F'].map(function (x) { return '<span class="cal-day">' + x + '</span>'; }).join('') + cal + '</div></div>' +
       '<div class="ins-block"><h3>Where your time went <small>last 14 days</small></h3>' +
       (catRows.length ? catRows.map(function (c) {
         return '<div class="ins-row"><span>' + esc(c[0]) + '</span><b>' + hm(c[1]) + '</b>' +
@@ -562,8 +704,7 @@
       '<div class="ins-stat ok"><b>' + stat.Completed + '</b><span>Completed</span></div>' +
       '<div class="ins-stat warn"><b>' + stat['In progress'] + '</b><span>In progress</span></div>' +
       '<div class="ins-stat bad"><b>' + stat.Blocked + '</b><span>Blocked</span></div></div></div>' +
-      (best && best.v ? '<p class="ins-note">Your busiest day this week was <b>' + esc(fmtDay(best.d)) + '</b> with <b>' + hm(best.v) + '</b>. ' +
-        '14-day total: <b>' + hm(total) + '</b> across <b>' + list.length + '</b> entries.</p>' : '');
+      (recent.length ? '<p class="ins-note">14-day total: <b>' + hm(total) + '</b> across <b>' + recent.length + '</b> entries.</p>' : '');
   }
 
   function startEdit(id) {
@@ -591,7 +732,7 @@
 
   function renderAdmin() {
     S.admin = S.admin || { tab: 'overview', preset: 'week', from: '', to: '', entries: [], users: [], f: { member: '', category: '', status: '', q: '' }, cred: null };
-    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + S.user.name) + '</p><h1>Team workload</h1><p>Entries from all members. Members see only their own.</p></div>' +
+    app.innerHTML = header() + '<main class="page"><div class="page-head"><div><p class="eyebrow">' + esc(greeting() + ', ' + firstName(S.user.name)) + '</p><h1>Team workload</h1><p>Entries from all members. Members see only their own.</p></div>' +
       '<div class="rangebar" id="rangeBar"></div></div>' +
       '<div class="tabs" role="tablist">' +
       ['overview:Overview', 'entries:Entries', 'team:Team'].map(function (x) {
@@ -624,7 +765,7 @@
     if (r.from > r.to) { $('#adminBody').innerHTML = '<div class="empty">The start date is after the end date.</div>'; return; }
     Promise.all([api('adminEntries', { from: r.from, to: r.to }), api('adminUsers')]).then(function (rs) {
       if (!rs[0].ok || !rs[1].ok) return;
-      a.entries = rs[0].data.entries; a.users = rs[1].data.users; a.range = r;
+      a.entries = rs[0].data.entries; a.attendance = rs[0].data.attendance || []; a.users = rs[1].data.users; a.range = r;
       drawAdmin();
     });
   }
@@ -643,22 +784,38 @@
     var a = S.admin, r = a.range, t = today();
     var through = r.to >= t ? addDays(t, -1) : r.to;
     var baseDays = workdays(r.from, through);
+    var mode = modeMap(a.attendance);
     var members = a.users.filter(function (u) { return u.role === 'member' && u.active; });
     return members.map(function (u) {
       var es = a.entries.filter(function (e) { return e.userId === u.userId; });
       var hours = sum(es, function (e) { return e.hours; });
       var days = {}; es.forEach(function (e) { days[e.date] = 1; });
-      var todayCounts = r.to >= t && r.from <= t && isWeekday(t) && es.some(function (e) { return e.date === t; });
-      var capDays = baseDays + (todayCounts ? 1 : 0);
+      // Days ticked On leave come out of capacity, so leave never reads as low load.
+      var leave = 0, wfh = 0, office = 0;
+      for (var c = r.from; c <= r.to && c <= t; c = addDays(c, 1)) {
+        var m = mode[u.userId + '|' + c];
+        if (m === 'On leave') { if (isWeekday(c) && c <= through) leave++; } else if (m === 'WFH') wfh++; else if (m === 'In office') office++;
+      }
+      var todayCounts = r.to >= t && r.from <= t && isWeekday(t) && es.some(function (e) { return e.date === t; }) && mode[u.userId + '|' + t] !== 'On leave';
+      var capDays = Math.max(0, baseDays - leave) + (todayCounts ? 1 : 0);
       if (hours > 0 && capDays === 0) capDays = 1;
       var cap = capDays * CFG.DAILY_CAPACITY;
       var util = cap ? hours / cap : 0;
-      var flag = hours === 0 ? 'none' : util > 1.1 ? 'over' : util < 0.6 ? 'low' : 'ok';
-      return { user: u, hours: hours, days: Object.keys(days).length, entries: es.length, cap: cap, util: util, flag: flag };
+      var onLeaveNow = mode[u.userId + '|' + t] === 'On leave';
+      var flag = hours === 0 ? (onLeaveNow || leave ? 'leave' : 'none') : util > 1.1 ? 'over' : util < 0.6 ? 'low' : 'ok';
+      return { user: u, hours: hours, days: Object.keys(days).length, entries: es.length, cap: cap, util: util, flag: flag,
+        leave: leave, wfh: wfh, office: office, today: mode[u.userId + '|' + t] || '' };
     }).sort(function (x, y) { return y.util - x.util; });
   }
 
+  function modeMap(list) {
+    var m = {}; (list || []).forEach(function (x) { m[x.userId + '|' + x.date] = x.mode; }); return m;
+  }
+  var MODE_SHORT = { 'In office': 'Office', 'WFH': 'WFH', 'On leave': 'Leave' };
+  var MODE_CLS = { 'In office': 'office', 'WFH': 'wfh', 'On leave': 'leave' };
+  function modeTag(m) { return m ? '<span class="mode-tag ' + MODE_CLS[m] + '">' + esc(MODE_SHORT[m]) + '</span>' : ''; }
   function flagBadge(f) {
+    if (f === 'leave') return '<span class="badge neutral">On leave</span>';
     if (f === 'over') return '<span class="badge bad">Over capacity</span>';
     if (f === 'low') return '<span class="badge warn">Below 60 percent</span>';
     if (f === 'none') return '<span class="badge neutral">Nothing logged</span>';
@@ -666,8 +823,10 @@
   }
 
   function drawOverview() {
-    var a = S.admin, r = a.range, stats = memberStats(), t = today();
+    var a = S.admin, r = a.range, stats = memberStats(), t = today(), mode = modeMap(a.attendance);
     var total = sum(a.entries, function (e) { return e.hours; });
+    var groups = { 'In office': [], 'WFH': [], 'On leave': [], '': [] };
+    stats.forEach(function (s) { groups[s.today].push(s.user); });
     var logging = stats.filter(function (s) { return s.hours > 0; });
     var memberDays = sum(stats, function (s) { return s.days; });
     var avgDay = memberDays ? total / memberDays : 0;
@@ -729,14 +888,20 @@
       }).join('') + '</ul>' + (attn.length > 7 ? '<p class="attn-more">' + (attn.length - 7) + ' more in the table below.</p>' : '')
         : '<div class="all-clear"><b>Everyone is within range.</b><span>No one is over capacity, below 60 percent, blocked or missing entries.</span></div>') + '</section>' +
 
-      '<section class="panel mix"><div class="panel-head"><h2>Task status</h2><span class="muted">' + a.entries.length + ' entries</span></div><div class="panel-body">' +
+      '<div class="stack"><section class="panel mix"><div class="panel-head"><h2>Task status</h2><span class="muted">' + a.entries.length + ' entries</span></div><div class="panel-body">' +
       '<div class="mix-bar" role="img" aria-label="Share of entries by status">' +
       ['Completed', 'In progress', 'Blocked'].map(function (k, i) {
         return '<span class="m' + i + '" style="width:' + (stCount[k] / nEntries * 100) + '%"></span>';
       }).join('') + '</div>' +
       '<div class="mix-legend">' + [['Completed', 'ok'], ['In progress', 'warn'], ['Blocked', 'bad']].map(function (k) {
         return '<div class="mix-item ' + k[1] + '"><b>' + stCount[k[0]] + '</b><span>' + k[0] + '</span><small>' + hm(stHours[k[0]]) + ' &middot; ' + Math.round(stCount[k[0]] / nEntries * 100) + '%</small></div>';
-      }).join('') + '</div></div></section></div>' +
+      }).join('') + '</div></div></section>' +
+      '<section class="panel att"><div class="panel-head"><h2>Today\'s attendance</h2><span class="muted">' + esc(fmtDay(t)) + '</span></div><div class="att-grid">' +
+      [['In office', 'office'], ['WFH', 'wfh'], ['On leave', 'leave'], ['', 'unmarked']].map(function (g) {
+        var list = groups[g[0]];
+        return '<div class="att-col ' + g[1] + '"><div class="att-head"><b>' + list.length + '</b><span>' + (g[0] || 'Not marked') + '</span></div>' +
+          '<div class="att-faces">' + list.map(function (u) { return '<span class="avatar xs" title="' + esc(u.name) + '">' + esc(initials(u.name)) + '</span>'; }).join('') + '</div></div>';
+      }).join('') + '</div></section></div></div>' +
 
       '<section class="panel"><div class="panel-head"><h2>Workload by member</h2><span class="muted">Capacity is ' + CFG.DAILY_CAPACITY + ' hours per working day. The line marks 100 percent. Today counts once a member has logged.</span></div>' +
       '<div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Hours</th><th>Against capacity</th><th class="num">Use</th><th class="num">Days logged</th><th>Flag</th></tr></thead><tbody>' +
@@ -750,16 +915,17 @@
       '</tbody></table></div></section>' +
 
       (stats.length && heatDays.length ? '<section class="panel" style="margin-top:28px"><div class="panel-head"><h2>Who logged when</h2>' +
-        '<span class="heat-key"><i class="k0"></i>0h<i class="k2"></i>4h<i class="k4"></i>8h<i class="kover"></i>Over 8h</span></div>' +
+        '<span class="heat-key"><i class="k0"></i>0h<i class="k2"></i>4h<i class="k4"></i>8h<i class="kover"></i>Over 8h<i class="kleave"></i>Leave<i class="kwfh"></i>WFH</span></div>' +
         '<div class="table-wrap"><div class="heatgrid" style="grid-template-columns:minmax(150px,1.4fr) repeat(' + heatDays.length + ', minmax(40px,1fr))">' +
         '<span class="hg-corner"></span>' + heatDays.map(function (d) {
           return '<span class="hg-day' + (d === t ? ' today' : '') + '">' + esc(parse(d).toLocaleDateString('en-IN', { weekday: 'short' })) + '<b>' + parse(d).getDate() + '</b></span>';
         }).join('') +
         stats.map(function (s) {
           return '<span class="hg-name">' + esc(s.user.name) + '</span>' + heatDays.map(function (d) {
-            var v = cell[s.user.userId + '|' + d] || 0, future = d > t;
-            var lvl = future ? 'future' : v === 0 ? 'k0' : v > CFG.DAILY_CAPACITY * 1.1 ? 'kover' : v >= CFG.DAILY_CAPACITY * 0.75 ? 'k4' : v >= CFG.DAILY_CAPACITY * 0.4 ? 'k3' : 'k2';
-            return '<span class="hg-cell ' + lvl + '" title="' + esc(s.user.name + ', ' + fmtDay(d) + ': ' + hm(v)) + '">' + (v ? hm(v).replace(' ', '') : '') + '</span>';
+            var v = cell[s.user.userId + '|' + d] || 0, future = d > t, md = mode[s.user.userId + '|' + d] || '';
+            var lvl = future ? 'future' : md === 'On leave' && !v ? 'kleave' : v === 0 ? 'k0' : v > CFG.DAILY_CAPACITY * 1.1 ? 'kover' : v >= CFG.DAILY_CAPACITY * 0.75 ? 'k4' : v >= CFG.DAILY_CAPACITY * 0.4 ? 'k3' : 'k2';
+            return '<span class="hg-cell ' + lvl + (md === 'WFH' ? ' wfh' : '') + '" title="' + esc(s.user.name + ', ' + fmtDay(d) + ': ' + hm(v) + (md ? ', ' + md : '')) + '">' +
+              (lvl === 'kleave' ? 'Leave' : v ? hm(v).replace(' ', '') : '') + '</span>';
           }).join('');
         }).join('') + '</div></div></section>' : '') +
 

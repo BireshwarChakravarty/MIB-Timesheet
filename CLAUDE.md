@@ -20,7 +20,7 @@ Goal: a timesheet-style dashboard where each team member logs tasks and hours so
 
 ## What is built (all in this folder)
 - `frontend/` plain HTML, CSS, JS, no build step. `config.js` has `API_URL`. Empty `API_URL` runs a demo mode with a simulated backend in `localStorage` (mock inside `app.js`).
-- `backend/Code.gs` Apps Script web app. Actions: login, me, logout, changePassword, myEntries, addEntry, updateEntry, deleteEntry, adminEntries, adminUsers, adminCreateUser, adminResetPassword, adminSetActive. Setup functions: `setup`, `createUsersFromRoster`, `benchmarkHash`, `weeklyBackup`.
+- `backend/Code.gs` Apps Script web app. Actions: login, me, logout, changePassword, myEntries (returns own attendance too), addEntry, updateEntry, deleteEntry, setMyDay (In office / WFH / On leave, own days only, Attendance tab), adminEntries, adminUsers, adminCreateUser, adminResetPassword, adminSetActive. Setup functions: `setup`, `createUsersFromRoster`, `benchmarkHash`, `weeklyBackup`.
 - `backend/Reports.gs` second Apps Script file. Builds a separate `MIB Workload Reports` spreadsheet (Dashboard with charts, Monthly heat map, All entries, Read me) with no Users data, so it can be exported to Excel or shared view-only. `MIB Workload` menu via `onOpen`; `installTriggers` sets hourly refresh and Monday backup. Rendering calls (charts, banding, conditional formats) have NOT run in Google's runtime; the pure data functions are tested.
 - `tests/backend.test.js` runs the real `Code.gs` in Node against stubbed Google services. 47 checks pass, including cross-member read, edit and delete attempts.
 - `tests/ui.test.py` Playwright smoke test of the demo mode. 17 checks pass.

@@ -172,6 +172,23 @@ for (let i = 0; i < 5; i++) call('login', { userId: 'mib02', password: 'wrong' +
 const locked = call('login', { userId: 'mib02', password: 'MemberB-Pass-2026' });
 check('account locks after 5 failures, even with the right password', locked.error === 'locked');
 
+/* ---------- attendance (In office / WFH / On leave) ---------- */
+check('member ticks WFH for today', call('setMyDay', { date: today, mode: 'WFH' }, tokA).ok === true);
+check('another member ticks On leave', call('setMyDay', { date: daysAgo(1), mode: 'On leave' }, tokB).ok === true);
+const attA = call('myEntries', {}, tokA).data.attendance;
+check('member sees only their own attendance', attA.length === 1 && attA[0].mode === 'WFH' && !JSON.stringify(attA).includes('On leave'));
+check('changing the mode updates the same day', call('setMyDay', { date: today, mode: 'In office' }, tokA).ok &&
+  call('myEntries', {}, tokA).data.attendance.length === 1 && call('myEntries', {}, tokA).data.attendance[0].mode === 'In office');
+check('unknown mode rejected', call('setMyDay', { date: today, mode: 'Beach' }, tokA).error === 'invalid');
+check('mode outside the edit window rejected', call('setMyDay', { date: daysAgo(30), mode: 'WFH' }, tokA).error === 'invalid');
+check('future date rejected', call('setMyDay', { date: '2999-01-01', mode: 'WFH' }, tokA).error === 'invalid');
+check('payload cannot set another member\'s day', (call('setMyDay', { date: daysAgo(2), mode: 'WFH', userId: 'mib02' }, tokA),
+  call('myEntries', {}, tokB).data.attendance.every(r => r.mode === 'On leave')));
+const adAtt = call('adminEntries', {}, tokAdmin).data.attendance;
+check('director sees everyone\'s attendance', adAtt.some(r => r.userId === 'mib01') && adAtt.some(r => r.userId === 'mib02' && r.mode === 'On leave'));
+check('empty mode clears the tick', call('setMyDay', { date: daysAgo(2), mode: '' }, tokA).ok &&
+  !call('myEntries', {}, tokA).data.attendance.some(r => r.date === daysAgo(2)));
+
 /* ---------- admin user management ---------- */
 const created = call('adminCreateUser', { name: 'Member C', teamRole: 'Video Editor' }, tokAdmin);
 check('admin creates user with next id', created.ok && created.data.userId === 'mib03' && created.data.tempPassword.length === 12);
@@ -217,6 +234,13 @@ check('malformed request does not crash', call('', null, null).ok === false);
   check('monthly matrix sums hours per member per month', cm && cm.values[sep] === 4 && cm.values[oct] === 2 && cm.total === 6);
   check('export list is newest first', d.entries[0].date === '2026-10-06' && d.entries[d.entries.length - 1].date === '2026-09-15');
   check('formula-like text is neutralised for the sheet', ctx.safeText_('=HYPERLINK("x")') === "'=HYPERLINK(\"x\")" && ctx.safeText_('Plain') === 'Plain');
+  const att = [{ userId: 'mib01', date: '2026-10-05', mode: 'On leave' }, { userId: 'mib01', date: '2026-10-06', mode: 'WFH' },
+    { userId: 'mib03', date: '2026-10-07', mode: 'In office' }];
+  const dl = ctx.buildReportData_(rows, users, ctx.reportRange_('week', '2026-10-08'), '2026-10-08', att);
+  const al = dl.members.find(m => m.userId === 'mib01');
+  check('leave day comes out of capacity (2 workdays x 8h)', al && al.cap === 16 && al.leaveDays === 1 && al.wfhDays === 1);
+  check('attendance grid carries ticked modes per day', dl.attendance.days.length === 4 &&
+    dl.attendance.rows.find(r => r.name === 'Member C').modes[2] === 'In office');
   check('load bar scales to 20 blocks', ctx.loadBar_(1.4, 1.4).length === 20 && ctx.loadBar_(0, 1.4) === '');
 }
 

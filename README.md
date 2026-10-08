@@ -26,7 +26,7 @@ Use a fresh Google account that only you control. Its Drive holds all data. See 
 
 1. **Create the sheet.** Sign in to the Google account, open Google Drive, New > Google Sheets. Name it `MIB Workload Log`. Do not share it with anyone.
 2. **Add the backend.** In the sheet: Extensions > Apps Script. Replace the default file with `backend/Code.gs`. Then + > Script, name it `Reports`, and paste `backend/Reports.gs`. Save.
-3. **Run setup.** Select `setup` and click Run. Accept the permission prompts (Sheets, Drive, triggers). This creates the Users, Entries, Roster and Credentials tabs and the `admin` account. The admin temporary password is on the Credentials tab.
+3. **Run setup.** Select `setup` and click Run. Accept the permission prompts (Sheets, Drive, triggers). This creates the Users, Entries, Roster, Attendance and Credentials tabs and the `admin` account (named Bireshwar Chakravarty, Account Director; rename it in the Users tab if needed). The admin temporary password is on the Credentials tab.
 4. **Add the team.** On the Roster tab enter one member per row (name, teamRole). Run `createUsersFromRoster`. Accounts `mib01`, `mib02` and so on are created, and their temporary passwords are written to the Credentials tab.
 5. **Distribute credentials privately**, then delete the Credentials tab. Everyone must set a new password at first sign-in.
 6. **Time the hashing.** Run `benchmarkHash` and read the log. If one hash takes more than about 700 ms, lower `PBKDF_ROUNDS` at the top of `Code.gs`.
@@ -40,18 +40,18 @@ Use a fresh Google account that only you control. Its Drive holds all data. See 
 
 | What | Where it lives | Who can open it |
 |---|---|---|
-| Users, Entries, Roster tabs (the data sheet) | `MIB Workload Log` in the owner's Google Drive | Owner only. Never share it. |
+| Users, Entries, Roster, Attendance tabs (the data sheet) | `MIB Workload Log` in the owner's Google Drive | Owner only. Never share it. |
 | Password data | Users tab: salted, iterated SHA-256 hashes. No plain passwords are stored. | Owner only |
 | Sessions | Apps Script cache, up to 6 hours | Nobody. Expires on its own. |
 | Reports workbook | `MIB Workload Reports` in the same Drive. Work data only, no Users tab. | Owner. Share view-only only with people allowed to see every member's entries. |
 | Backups | `MIB Workload Log backup yyyy-mm-dd` copies in the same Drive, last 8 kept | Owner only |
 | Website | GitHub Pages. Holds no data. | Public link, but nothing shows without a sign-in |
 
-A member signed in to the website sees only their own entries. The director (`admin`) sees everyone's entries and manages accounts. Nobody but the owner ever opens the sheet itself.
+A member signed in to the website sees only their own entries and their own work mode (In office, WFH or On leave, ticked per day within the 7-day edit window). Days ticked On leave come out of capacity, so leave never shows as low load. The director (`admin`) sees everyone's entries and manages accounts. Nobody but the owner ever opens the sheet itself.
 
 ## Reports and export
 
-- **Reports workbook** (`MIB Workload Reports`): Dashboard (figures, workload by member with flags, category and status split, hours per day, three charts), Monthly (member by month heat map, 12 months), All entries (filterable flat table), Read me (definitions). Refreshes hourly, or on demand from the **MIB Workload** menu for this week, last week, this month or the last 30 days.
+- **Reports workbook** (`MIB Workload Reports`): Dashboard (figures, workload by member with flags and office/WFH/leave days, category and status split, hours per day, three charts), Monthly (member by month heat map, 12 months), Attendance (work mode per member per day), All entries (filterable flat table), Read me (definitions). Refreshes hourly, or on demand from the **MIB Workload** menu for this week, last week, this month or the last 30 days.
 - **Excel**: in the reports workbook, File > Download > Microsoft Excel (.xlsx). The **MIB Workload > Open reports workbook** menu also gives a direct .xlsx link. Load bars are plain text characters, so they survive the export.
 - **CSV**: from the director view on the website (Entries tab > Export CSV), or from the All entries tab via File > Download.
 - **Hours** are decimal in quarter steps: 0.25 = 15 min, 0.5 = 30 min, 0.75 = 45 min. The website shows them as hours and minutes, for example 3.75 as 3h 45m.
