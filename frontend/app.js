@@ -101,7 +101,8 @@
       for (var i = 1; i <= 8; i++) {
         var id = 'mib' + pad(i);
         users.push({ userId: id, name: 'Team Member ' + pad(i), role: 'member', teamRole: ROLES[i - 1],
-          password: 'Welcome@01', active: true, mustChange: i === 8, lastLogin: '' });
+          password: 'Welcome@01', active: true, mustChange: i === 8,
+          lastLogin: i === 8 ? '' : new Date(Date.now() - (i * 5 + 1) * 3600000).toISOString() });
       }
       var entries = [], t = today(), n = 0;
       users.forEach(function (u) {
@@ -183,6 +184,7 @@
           return fail('login', 'User ID or password is incorrect.');
         }
         delete db.fails[id];
+        u.lastLogin = new Date().toISOString();
         var tk = rand(40); db.sessions[tk] = u.userId; save();
         return ok({ token: tk, user: pub(u), options: OPTIONS });
       }
@@ -335,15 +337,16 @@
       '<li>First sign-in flow: <code>mib08</code> / <code>Welcome@01</code></li></ul>' +
       '<button class="linkbtn" id="btnReset" type="button" style="color:var(--plum)">Reset demo data</button></div>' : '';
     app.innerHTML = '<div class="login">' +
-      '<aside class="login-aside"><span class="aside-tag">MIB account | Avian We.</span>' +
-      '<div class="aside-copy"><h1>Log the work.<br>See the load.</h1><p>Each member records their own tasks and hours. Entries are private to the member and visible to the account director.</p></div>' +
+      '<aside class="login-aside"><div class="aside-tag"><b>Ministry of Information &amp; Broadcasting</b><span>Government Practice</span><span>Avian We.</span></div>' +
+      '<div class="aside-copy"><h1>Log the work.<br>See the load.</h1><p>The MIB team\'s daily work, in one place. Log each task and the time it took. Your entries stay between you and the account director, who uses them to keep workload balanced across the team.</p></div>' +
       '<div class="glass" aria-hidden="true"><div class="glass-top"><div><small>This week</small><b>166 h</b></div><span class="glass-pill">On track</span></div>' +
-      '<div class="glass-bars"><i style="height:62%"></i><i style="height:80%"></i><i style="height:74%"></i><i style="height:91%"></i><i style="height:48%"></i></div>' +
+      '<div class="glass-bars">' + [['Mon', 62], ['Tue', 80], ['Wed', 74], ['Thu', 91], ['Fri', 48]].map(function (b) {
+        return '<div><i style="height:' + b[1] + '%"></i><span>' + b[0] + '</span></div>'; }).join('') + '</div>' +
       '<div class="glass-foot"><span class="glass-faces"><em>TL</em><em>CW</em><em>GD</em><em>VE</em></span><small>21 members logging</small></div></div>' +
-      '<small>' + esc(CFG.TITLE) + '</small></aside>' +
+      '<small>Ministry of Information &amp; Broadcasting Timesheet &copy;Avian We.</small></aside>' +
       '<main class="login-main"><form class="login-box" id="loginForm" novalidate>' +
       '<div class="login-logo">' + logoImg('full') + '</div>' +
-      '<p class="eyebrow">' + esc(CFG.TITLE) + '</p><h2>Sign in</h2><p class="muted login-sub">Use the user ID and password the account director gave you.</p>' +
+      '<p class="eyebrow">Ministry of Information &amp; Broadcasting Timesheet</p><h2>Sign in</h2><p class="muted login-sub">Enter your user ID and password to continue.</p>' +
       '<div class="field"><label for="uid">User ID</label><input id="uid" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>' +
       '<div class="field"><label for="pw">Password</label><div class="pw-wrap"><input id="pw" type="password" autocomplete="current-password" required>' +
       '<button class="pw-toggle" id="pwToggle" type="button" aria-label="Show password" aria-pressed="false"></button></div></div>' +
@@ -662,15 +665,25 @@
   }
 
   function drawOverview() {
-    var a = S.admin, r = a.range, stats = memberStats();
+    var a = S.admin, r = a.range, stats = memberStats(), t = today();
     var total = sum(a.entries, function (e) { return e.hours; });
     var logging = stats.filter(function (s) { return s.hours > 0; });
     var memberDays = sum(stats, function (s) { return s.days; });
     var avgDay = memberDays ? total / memberDays : 0;
-    var over = stats.filter(function (s) { return s.flag === 'over'; }).length;
-    var cats = {}; a.entries.forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.hours; });
-    var catRows = Object.keys(cats).map(function (k) { return [k, cats[k]]; }).sort(function (x, y) { return y[1] - x[1]; });
+    var over = stats.filter(function (s) { return s.flag === 'over'; });
+    var low = stats.filter(function (s) { return s.flag === 'low'; });
+    var none = stats.filter(function (s) { return s.flag === 'none'; });
+    var blocked = a.entries.filter(function (e) { return e.status === 'Blocked'; });
+    function groupHours(key) {
+      var g = {}; a.entries.forEach(function (e) { g[e[key]] = (g[e[key]] || 0) + e.hours; });
+      return Object.keys(g).map(function (k) { return [k, g[k]]; }).sort(function (x, y) { return y[1] - x[1]; });
+    }
+    var catRows = groupHours('category');
     var maxCat = catRows.length ? catRows[0][1] : 1;
+    var platRows = groupHours('platform');
+    var roleOf = {}; a.users.forEach(function (u) { roleOf[u.userId] = u.teamRole || 'Other'; });
+    var roleG = {}; a.entries.forEach(function (e) { var k = roleOf[e.userId] || 'Other'; roleG[k] = (roleG[k] || 0) + e.hours; });
+    var roleRows = Object.keys(roleG).map(function (k) { return [k, roleG[k]]; }).sort(function (x, y) { return y[1] - x[1]; });
 
     var days = [], c = r.from, dayTotals = {};
     a.entries.forEach(function (e) { dayTotals[e.date] = (dayTotals[e.date] || 0) + e.hours; });
@@ -679,12 +692,51 @@
     var maxDay = Math.max(capTotal * 1.15, Math.max.apply(null, days.map(function (d) { return dayTotals[d] || 0; }).concat([1])));
     var step = days.length > 16 ? 3 : 1;
 
+    // Needs attention: the few things a director should act on, most urgent first.
+    var attn = [];
+    over.forEach(function (s) { attn.push({ sev: 'bad', who: s.user, text: '<b>' + esc(s.user.name) + '</b> is at <b>' + Math.round(s.util * 100) + '%</b> of capacity (' + hm(s.hours) + ' against ' + hm(s.cap) + ').', tip: 'Consider moving work to someone below range.' }); });
+    blocked.slice(0, 3).forEach(function (e) { attn.push({ sev: 'bad', who: { userId: e.userId, name: e.name }, text: '<b>' + esc(e.name) + '</b> is blocked on <b>' + esc(e.task) + '</b> (' + esc(fmtDay(e.date)) + ').', tip: esc(e.notes || e.category) }); });
+    low.forEach(function (s) { attn.push({ sev: 'warn', who: s.user, text: '<b>' + esc(s.user.name) + '</b> is at <b>' + Math.round(s.util * 100) + '%</b> of capacity.', tip: 'Has room for more work, or may be under-logging.' }); });
+    none.forEach(function (s) { attn.push({ sev: 'neutral', who: s.user, text: '<b>' + esc(s.user.name) + '</b> has not logged anything this period.', tip: s.user.mustChange ? 'Has not finished first sign-in yet.' : 'Send a reminder.' }); });
+
+    var heatDays = days.filter(function (d) { return isWeekday(d); }).slice(-15);
+    var cell = {}; a.entries.forEach(function (e) { var k = e.userId + '|' + e.date; cell[k] = (cell[k] || 0) + e.hours; });
+
+    var stCount = { Completed: 0, 'In progress': 0, Blocked: 0 }, stHours = { Completed: 0, 'In progress': 0, Blocked: 0 };
+    a.entries.forEach(function (e) { stCount[e.status] = (stCount[e.status] || 0) + 1; stHours[e.status] = (stHours[e.status] || 0) + e.hours; });
+    var nEntries = a.entries.length || 1;
+
+    function barList(rows) {
+      var mx = rows.length ? rows[0][1] : 1;
+      return rows.length ? rows.map(function (x) {
+        return '<div class="cat-row"><span>' + esc(x[0]) + '</span><div class="bar"><span style="width:' + (x[1] / mx * 100) + '%"></span></div><span class="num">' + hm(x[1]) + '</span></div>';
+      }).join('') + '<div style="height:10px"></div>' : '<div class="empty">No entries in this period.</div>';
+    }
+
     $('#adminBody').innerHTML =
       '<div class="figures">' +
       '<div class="fig"><i class="ico ico-clock"></i><b>' + hm(total) + '</b><span>Hours logged</span></div>' +
       '<div class="fig"><i class="ico ico-team"></i><b>' + logging.length + ' of ' + stats.length + '</b><span>Members with entries</span></div>' +
       '<div class="fig"><i class="ico ico-avg"></i><b>' + hm(avgDay) + '</b><span>Average per member per logged day</span></div>' +
-      '<div class="fig' + (over ? ' alert' : '') + '"><i class="ico ico-alert"></i><b>' + over + '</b><span>Members over capacity</span></div></div>' +
+      '<div class="fig' + (over.length ? ' alert' : '') + '"><i class="ico ico-alert"></i><b>' + over.length + '</b><span>Members over capacity</span></div></div>' +
+
+      '<div class="ov-top">' +
+      '<section class="panel attn"><div class="panel-head"><h2>Needs attention</h2><span class="count-pill' + (attn.length ? '' : ' ok') + '">' + (attn.length ? attn.length + ' item' + (attn.length > 1 ? 's' : '') : 'All clear') + '</span></div>' +
+      (attn.length ? '<ul class="attn-list">' + attn.slice(0, 7).map(function (x) {
+        return '<li class="sev-' + x.sev + '"><span class="avatar sm" aria-hidden="true">' + esc(initials(x.who.name)) + '</span><div><p>' + x.text + '</p><small>' + x.tip + '</small></div>' +
+          '<button class="linkbtn" type="button" data-member="' + esc(x.who.userId) + '">View</button></li>';
+      }).join('') + '</ul>' + (attn.length > 7 ? '<p class="attn-more">' + (attn.length - 7) + ' more in the table below.</p>' : '')
+        : '<div class="all-clear"><b>Everyone is within range.</b><span>No one is over capacity, below 60 percent, blocked or missing entries.</span></div>') + '</section>' +
+
+      '<section class="panel mix"><div class="panel-head"><h2>Task status</h2><span class="muted">' + a.entries.length + ' entries</span></div><div class="panel-body">' +
+      '<div class="mix-bar" role="img" aria-label="Share of entries by status">' +
+      ['Completed', 'In progress', 'Blocked'].map(function (k, i) {
+        return '<span class="m' + i + '" style="width:' + (stCount[k] / nEntries * 100) + '%"></span>';
+      }).join('') + '</div>' +
+      '<div class="mix-legend">' + [['Completed', 'ok'], ['In progress', 'warn'], ['Blocked', 'bad']].map(function (k) {
+        return '<div class="mix-item ' + k[1] + '"><b>' + stCount[k[0]] + '</b><span>' + k[0] + '</span><small>' + hm(stHours[k[0]]) + ' &middot; ' + Math.round(stCount[k[0]] / nEntries * 100) + '%</small></div>';
+      }).join('') + '</div></div></section></div>' +
+
       '<section class="panel"><div class="panel-head"><h2>Workload by member</h2><span class="muted">Capacity is ' + CFG.DAILY_CAPACITY + ' hours per working day. The line marks 100 percent. Today counts once a member has logged.</span></div>' +
       '<div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Hours</th><th>Against capacity</th><th class="num">Use</th><th class="num">Days logged</th><th>Flag</th></tr></thead><tbody>' +
       (stats.length ? stats.map(function (s) {
@@ -695,26 +747,51 @@
           '<td class="num">' + Math.round(s.util * 100) + '%</td><td class="num">' + s.days + '</td><td>' + flagBadge(s.flag) + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="empty">No active members yet. Add members in the Team tab.</td></tr>') +
       '</tbody></table></div></section>' +
+
+      (stats.length && heatDays.length ? '<section class="panel" style="margin-top:28px"><div class="panel-head"><h2>Who logged when</h2>' +
+        '<span class="heat-key"><i class="k0"></i>0h<i class="k2"></i>4h<i class="k4"></i>8h<i class="kover"></i>Over 8h</span></div>' +
+        '<div class="table-wrap"><div class="heatgrid" style="grid-template-columns:minmax(150px,1.4fr) repeat(' + heatDays.length + ', minmax(40px,1fr))">' +
+        '<span class="hg-corner"></span>' + heatDays.map(function (d) {
+          return '<span class="hg-day' + (d === t ? ' today' : '') + '">' + esc(parse(d).toLocaleDateString('en-IN', { weekday: 'short' })) + '<b>' + parse(d).getDate() + '</b></span>';
+        }).join('') +
+        stats.map(function (s) {
+          return '<span class="hg-name">' + esc(s.user.name) + '</span>' + heatDays.map(function (d) {
+            var v = cell[s.user.userId + '|' + d] || 0, future = d > t;
+            var lvl = future ? 'future' : v === 0 ? 'k0' : v > CFG.DAILY_CAPACITY * 1.1 ? 'kover' : v >= CFG.DAILY_CAPACITY * 0.75 ? 'k4' : v >= CFG.DAILY_CAPACITY * 0.4 ? 'k3' : 'k2';
+            return '<span class="hg-cell ' + lvl + '" title="' + esc(s.user.name + ', ' + fmtDay(d) + ': ' + hm(v)) + '">' + (v ? hm(v).replace(' ', '') : '') + '</span>';
+          }).join('');
+        }).join('') + '</div></div></section>' : '') +
+
       '<div class="two-col">' +
       '<section class="panel"><div class="panel-head"><h2>Hours by category</h2></div>' +
       (catRows.length ? catRows.map(function (x) {
         return '<div class="cat-row"><span>' + esc(x[0]) + '</span><div class="bar"><span style="width:' + (x[1] / maxCat * 100) + '%"></span></div><span class="num">' + hm(x[1]) + '</span></div>';
       }).join('') + '<div style="height:10px"></div>' : '<div class="empty">No entries in this period.</div>') + '</section>' +
-      '<section class="panel"><div class="panel-head"><h2>Hours per day</h2><span class="muted">Dashed line is team capacity</span></div>' +
+      '<section class="panel"><div class="panel-head"><h2>Hours per day</h2><span class="muted">Dashed line is team capacity, ' + hm(capTotal) + '</span></div>' +
       (days.length ? '<div class="days" role="img" aria-label="Team hours per day">' +
         '<div class="capline" style="bottom:' + (capTotal / maxDay * 176 + 0) + 'px"></div>' +
         days.map(function (d) {
           var v = dayTotals[d] || 0;
-          return '<div class="day-col' + (capTotal && v > capTotal * 1.1 ? ' over' : '') + '" title="' + esc(fmtDay(d)) + ': ' + hm(v) + '"><div style="height:' + (v / maxDay * 100) + '%"></div></div>';
+          return '<div class="day-col' + (capTotal && v > capTotal * 1.1 ? ' over' : '') + (d === t ? ' today' : '') + '" title="' + esc(fmtDay(d)) + ': ' + hm(v) + '">' +
+            (days.length <= 10 && v ? '<em>' + hm(v).replace(' ', '') + '</em>' : '') + '<div style="height:' + (v / maxDay * 100) + '%"></div></div>';
         }).join('') + '</div><div class="day-labels">' +
-        days.map(function (d, i) { return '<span>' + (i % step === 0 ? esc(String(parse(d).getDate())) : '') + '</span>'; }).join('') + '</div>' : '<div class="empty">No working days in this period.</div>') +
-      '</section></div>';
+        days.map(function (d, i) {
+          return '<span>' + (i % step === 0 ? (days.length <= 10 ? esc(parse(d).toLocaleDateString('en-IN', { weekday: 'short' })) + ' ' : '') + esc(String(parse(d).getDate())) : '') + '</span>';
+        }).join('') + '</div>' +
+        '<div class="day-foot"><div><b>' + hm(days.length ? total / days.length : 0) + '</b><span>Average per day</span></div>' +
+        '<div><b>' + (capTotal ? Math.round(total / (capTotal * Math.max(1, days.length)) * 100) : 0) + '%</b><span>Of team capacity</span></div>' +
+        '<div><b>' + esc(days.length ? fmtDay(days.slice().sort(function (x, y) { return (dayTotals[y] || 0) - (dayTotals[x] || 0); })[0]) : '') + '</b><span>Busiest day</span></div></div>'
+        : '<div class="empty">No working days in this period.</div>') +
+      '</section></div>' +
+
+      '<div class="two-col">' +
+      '<section class="panel"><div class="panel-head"><h2>Hours by platform</h2></div>' + barList(platRows) + '</section>' +
+      '<section class="panel"><div class="panel-head"><h2>Hours by team role</h2></div>' + barList(roleRows) + '</section></div>';
 
     $all('[data-member]').forEach(function (b) {
       b.addEventListener('click', function () { a.f.member = b.getAttribute('data-member'); a.tab = 'entries'; $all('.tab').forEach(function (x) { x.setAttribute('aria-selected', x.getAttribute('data-tab') === 'entries'); }); drawAdmin(); });
     });
   }
-
   function filteredEntries() {
     var f = S.admin.f, q = f.q.trim().toLowerCase();
     return S.admin.entries.filter(function (e) {
@@ -733,14 +810,26 @@
       '<div class="field"><label for="fs">Status</label><select id="fs">' + optionList(S.options.statuses, f.status, 'All statuses') + '</select></div>' +
       '<div class="field"><label for="fq">Search</label><input id="fq" type="text" value="' + esc(f.q) + '" placeholder="Task or notes"></div>' +
       '<div style="margin-left:auto"><button class="btn secondary" id="btnCsv" type="button">Export CSV</button></div></div>' +
+      '<div class="sumstrip" id="entSum" aria-live="polite"></div>' +
       '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Member</th><th>Category</th><th>Task</th><th>Platform</th><th class="num">Hours</th><th>Status</th></tr></thead><tbody id="entRows"></tbody></table></div></section>';
     function rows() {
       var list = filteredEntries();
+      var hrs = sum(list, function (e) { return e.hours; }), who = {}, days = {}, st = { Completed: 0, 'In progress': 0, Blocked: 0 };
+      list.forEach(function (e) { who[e.userId] = 1; days[e.date] = 1; st[e.status] = (st[e.status] || 0) + 1; });
+      var n = list.length || 1;
+      $('#entSum').innerHTML =
+        '<div><b>' + list.length + '</b><span>Entries</span></div>' +
+        '<div><b>' + hm(hrs) + '</b><span>Total time</span></div>' +
+        '<div><b>' + Object.keys(who).length + '</b><span>Members</span></div>' +
+        '<div><b>' + hm(list.length ? hrs / list.length : 0) + '</b><span>Average per entry</span></div>' +
+        '<div class="sum-mix"><div class="mix-bar small">' + ['Completed', 'In progress', 'Blocked'].map(function (k, i) {
+          return '<span class="m' + i + '" style="width:' + (st[k] / n * 100) + '%"></span>'; }).join('') + '</div>' +
+        '<span>' + st.Completed + ' completed, ' + st['In progress'] + ' in progress, ' + st.Blocked + ' blocked</span></div>';
       $('#entRows').innerHTML = list.length ? list.map(function (e) {
-        return '<tr><td>' + esc(fmtDay(e.date)) + '</td><td>' + esc(e.name) + '</td><td>' + esc(e.category) + '</td><td>' + esc(e.task) +
+        return '<tr class="s-' + statusClass(e.status) + '"><td>' + esc(fmtDay(e.date)) + '</td><td><span class="who"><span class="avatar xs" aria-hidden="true">' + esc(initials(e.name)) + '</span>' + esc(e.name) + '</span></td><td>' + esc(e.category) + '</td><td>' + esc(e.task) +
           (e.notes ? '<div class="muted" style="font-size:.84rem">' + esc(e.notes) + '</div>' : '') + '</td><td>' + esc(e.platform) +
           '</td><td class="num">' + hm(e.hours) + '</td><td>' + statusBadge(e.status) + '</td></tr>';
-      }).join('') + '<tr><td colspan="5"><strong>Total</strong></td><td class="num"><strong>' + h(sum(list, function (e) { return e.hours; })) + '</strong></td><td></td></tr>'
+      }).join('') + '<tr class="total-row"><td colspan="5"><strong>Total</strong></td><td class="num"><strong>' + hm(hrs) + '</strong></td><td></td></tr>'
         : '<tr><td colspan="7" class="empty">No entries match these filters.</td></tr>';
     }
     rows();
@@ -767,24 +856,55 @@
     toast('CSV exported');
   }
 
+  function fmtLogin(iso) {
+    if (!iso) return '<span class="muted">Never</span>';
+    var d = new Date(iso), mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (isNaN(mins)) return '<span class="muted">Unknown</span>';
+    if (mins < 60) return mins <= 1 ? 'Just now' : mins + ' min ago';
+    if (mins < 1440) return Math.round(mins / 60) + ' h ago';
+    return esc(d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
+  }
+
   function drawTeam() {
     var a = S.admin;
+    var hrsBy = {}; a.entries.forEach(function (e) { hrsBy[e.userId] = (hrsBy[e.userId] || 0) + e.hours; });
+    var members = a.users.filter(function (u) { return u.role === 'member'; });
+    var active = members.filter(function (u) { return u.active; });
+    var pending = members.filter(function (u) { return u.active && (u.mustChange || !u.lastLogin); });
+    var roles = {}; active.forEach(function (u) { var k = u.teamRole || 'Other'; roles[k] = (roles[k] || 0) + 1; });
+    var roleRows = Object.keys(roles).map(function (k) { return [k, roles[k]]; }).sort(function (x, y) { return y[1] - x[1] || x[0].localeCompare(y[0]); });
+    var maxRole = roleRows.length ? roleRows[0][1] : 1;
+    var maxHrs = Math.max.apply(null, [1].concat(Object.keys(hrsBy).map(function (k) { return hrsBy[k]; })));
     var credHtml = a.cred ? '<div class="cred-box" role="status"><p><strong>' + esc(a.cred.title) + '</strong></p>' +
       '<p>User ID <code>' + esc(a.cred.userId) + '</code> Temporary password <code>' + esc(a.cred.pw) + '</code></p>' +
       '<p class="muted">Shown once. Share it with the member privately. They must set a new password at first sign-in.</p>' +
       '<div class="form-actions"><button class="btn small" id="btnCopy" type="button">Copy details</button><button class="btn small secondary" id="btnCredClose" type="button">Done</button></div></div>' : '';
     $('#adminBody').innerHTML = credHtml +
-      '<div class="grid-member" style="grid-template-columns:340px minmax(0,1fr)">' +
+      '<div class="team-stats">' +
+      '<div><b>' + active.length + '</b><span>Active members</span></div>' +
+      '<div><b>' + (members.length - active.length) + '</b><span>Deactivated</span></div>' +
+      '<div><b>' + roleRows.length + '</b><span>Roles covered</span></div>' +
+      '<div class="' + (pending.length ? 'warn' : '') + '"><b>' + pending.length + '</b><span>Yet to sign in</span></div></div>' +
+      '<div class="grid-member" style="grid-template-columns:340px minmax(0,1fr)"><div class="stack">' +
       '<section class="panel"><div class="panel-head"><h2>Add member</h2></div><div class="panel-body"><form id="addForm" novalidate>' +
       '<div class="field"><label for="nm">Name</label><input id="nm" type="text" required></div>' +
       '<div class="field"><label for="tr">Role in team</label><input id="tr" type="text" placeholder="Graphic Designer"></div>' +
       '<div class="field"><label for="ni">User ID (optional)</label><input id="ni" type="text" autocapitalize="none"><div class="hint">Left empty, the next ID such as mib09 is assigned.</div></div>' +
       '<p class="err" id="addErr" role="alert"></p><button class="btn" type="submit">Create account</button></form></div></section>' +
-      '<section class="panel"><div class="panel-head"><h2>Accounts</h2><span class="muted">' + a.users.length + ' total</span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>User ID</th><th>Status</th><th>Actions</th></tr></thead><tbody>' +
+      '<section class="panel"><div class="panel-head"><h2>Team make-up</h2><span class="muted">Active members by role</span></div>' +
+      (roleRows.length ? roleRows.map(function (x) {
+        return '<div class="cat-row role-row"><span>' + esc(x[0]) + '</span><div class="bar"><span style="width:' + (x[1] / maxRole * 100) + '%"></span></div><span class="num">' + x[1] + '</span></div>';
+      }).join('') + '<div style="height:10px"></div>' : '<div class="empty">No members yet.</div>') +
+      (pending.length ? '<div class="ins-block"><h3>Yet to sign in</h3><div class="chips">' + pending.map(function (u) {
+        return '<span class="pchip"><span class="avatar xs" aria-hidden="true">' + esc(initials(u.name)) + '</span>' + esc(u.name) + '</span>'; }).join('') + '</div></div>' : '') +
+      '</section></div>' +
+      '<section class="panel"><div class="panel-head"><h2>Accounts</h2><span class="muted">' + a.users.length + ' total | hours for ' + esc(fmtShort(a.range.from)) + ' to ' + esc(fmtShort(a.range.to)) + '</span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>This period</th><th>Last sign-in</th><th>Status</th><th>Actions</th></tr></thead><tbody>' +
       a.users.map(function (u) {
         var self = u.userId === S.user.userId;
-        return '<tr><td class="namecell"><span class="avatar sm" aria-hidden="true">' + esc(initials(u.name)) + '</span><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || u.role) + '</span></td><td>' + esc(u.userId) + '</td>' +
-          '<td>' + (u.active ? '<span class="badge ok">Active</span>' : '<span class="badge neutral">Inactive</span>') + '</td><td>' +
+        return '<tr><td class="namecell"><span class="avatar sm" aria-hidden="true">' + esc(initials(u.name)) + '</span><strong>' + esc(u.name) + '</strong><span><code class="uid">' + esc(u.userId) + '</code> ' + esc(u.teamRole || u.role) + '</span></td>' +
+          '<td>' + (u.role === 'member' ? '<div class="mini-hours"><b>' + hm(hrsBy[u.userId] || 0) + '</b><div class="bar"><span style="width:' + ((hrsBy[u.userId] || 0) / maxHrs * 100) + '%"></span></div></div>' : '<span class="muted">Director</span>') + '</td>' +
+          '<td>' + fmtLogin(u.lastLogin) + '</td>' +
+          '<td>' + (u.active ? (u.mustChange ? '<span class="badge warn">First sign-in pending</span>' : '<span class="badge ok">Active</span>') : '<span class="badge neutral">Inactive</span>') + '</td><td class="actions">' +
           '<button class="btn small secondary" data-reset="' + esc(u.userId) + '" type="button">Reset password</button> ' +
           (self ? '' : '<button class="btn small ' + (u.active ? 'danger' : 'secondary') + '" data-active="' + esc(u.userId) + '" data-to="' + (!u.active) + '" type="button">' + (u.active ? 'Deactivate' : 'Reactivate') + '</button>') +
           '</td></tr>';
