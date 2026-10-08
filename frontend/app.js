@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var CFG = Object.assign({ API_URL: '', TITLE: 'Ministry of Information & Broadcasting Timesheet', DAILY_CAPACITY: 8, WEEKLY_TARGET: 40 }, window.APP_CONFIG || {});
+  var CFG = Object.assign({ API_URL: '', TITLE: 'Ministry of Information & Broadcasting Timesheet', SHORT_TITLE: 'MIB Timesheet', DAILY_CAPACITY: 8, WEEKLY_TARGET: 40 }, window.APP_CONFIG || {});
   var DEMO = !CFG.API_URL;
   var TOKEN_KEY = 'mib.token';
 
@@ -64,7 +64,7 @@
   /* The real rules are enforced and tested in backend/Code.gs.          */
   /* ------------------------------------------------------------------ */
   var Mock = (function () {
-    var KEY = 'mibdemo.v1';
+    var KEY = 'mibdemo.v2'; // bump to give every browser fresh sample data
     var OPTIONS = {
       categories: ['Content writing (English)', 'Content writing (Hindi)', 'Graphic design', 'Video editing',
         'Community Notes', 'Social media posting', 'Monitoring and reporting', 'Client coordination',
@@ -129,6 +129,7 @@
       return { seedDay: t, users: users, entries: entries, sessions: {}, fails: {}, nextEntry: n + 1 };
     }
     function load() {
+      try { localStorage.removeItem('mibdemo.v1'); } catch (e) { /* ignore */ }
       try {
         var r = JSON.parse(localStorage.getItem(KEY));
         if (r && r.seedDay === today()) return r;
@@ -313,7 +314,7 @@
   function header() {
     var u = S.user;
     return '<header class="topbar"><div class="topbar-inner">' +
-      '<div class="brand">' + logoImg('mark') + '<span class="brand-sep"></span><span class="brand-title">' + esc(CFG.TITLE) + '</span></div>' +
+      '<div class="brand">' + logoImg('mark') + '<span class="brand-sep"></span><span class="brand-title"><span class="t-full">' + esc(CFG.TITLE) + '</span><span class="t-short">' + esc(CFG.SHORT_TITLE) + '</span></span></div>' +
       '<div class="who"><span class="avatar" aria-hidden="true">' + esc(initials(u.name)) + '</span>' +
       '<div><strong>' + esc(u.name) + '</strong><span>' + esc(u.teamRole || (u.role === 'admin' ? 'Director' : 'Member')) + '</span></div>' +
       '<button class="linkbtn" id="btnPw" type="button">Change password</button>' +
